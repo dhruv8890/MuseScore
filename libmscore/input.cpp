@@ -14,10 +14,15 @@
 #include "segment.h"
 #include "part.h"
 #include "staff.h"
+#include "stem.h"
+#include "hook.h"
 #include "score.h"
 #include "chord.h"
 #include "rest.h"
 #include "measure.h"
+#include "accidental.h"
+#include "durationtype.h"
+#include "select.h"
 
 namespace Ms {
 
@@ -42,16 +47,16 @@ StaffGroup InputState::staffGroup() const
       {
       if (_segment == 0 || _track == -1)
             return StaffGroup::STANDARD;
-      return _segment->score()->staff(_track/VOICES)->staffType()->group();
+      return _segment->score()->staff(_track/VOICES)->staffType(_segment->tick())->group();
       }
 
 //---------------------------------------------------------
 //   tick
 //---------------------------------------------------------
 
-int InputState::tick() const
+Fraction InputState::tick() const
       {
-      return _segment ? _segment->tick() : 0;
+      return _segment ? _segment->tick() : Fraction(0,1);
       }
 
 //---------------------------------------------------------
@@ -60,49 +65,119 @@ int InputState::tick() const
 
 ChordRest* InputState::cr() const
       {
-      return _segment ? static_cast<ChordRest*>(_segment->element(_track)) : 0;
+      // _track could potentially be -1, for instance after navigation through a frame
+      return _segment && _track >= 0 ? toChordRest(_segment->element(_track)) : 0;
+      }
+
+//---------------------------------------------------------
+//   setDots
+//---------------------------------------------------------
+
+void InputState::setDots(int n)
+      {
+      if (n && (!_duration.isValid() || _duration.isZero() || _duration.isMeasure()))
+            _duration = TDuration::DurationType::V_QUARTER;
+      _duration.setDots(n);
+      }
+
+//---------------------------------------------------------
+//   note
+//---------------------------------------------------------
+
+Note* InputState::note(Element* e)
+      {
+      return e && e->isNote() ? toNote(e) : nullptr;
+      }
+
+//---------------------------------------------------------
+//   chordRest
+//---------------------------------------------------------
+
+ChordRest* InputState::chordRest(Element* e)
+      {
+      if (!e)
+            return nullptr;
+      if (e->isChordRest())
+            return toChordRest(e);
+      if (e->isNote())
+            return toNote(e)->chord();
+      if (e->isStem())
+            return toStem(e)->chord();
+      if (e->isHook())
+            return toHook(e)->chord();
+      return nullptr;
       }
 
 //---------------------------------------------------------
 //   update
 //---------------------------------------------------------
 
-void InputState::update(Element* e)
+void InputState::update(Selection& selection)
       {
+      setDuration(TDuration::DurationType::V_INVALID);
+      setRest(false);
+      setAccidentalType(AccidentalType::NONE);
+      Note* n1 = nullptr;
+      ChordRest* cr1 = nullptr;
+      bool differentAccidentals = false;
+      bool differentDurations = false;
+      bool chordsAndRests = false;
+      for (Element* e : selection.elements()) {
+            if (Note* n = note(e)) {
+                  if (n1) {
+                        if (n->accidentalType() != n1->accidentalType()) {
+                              setAccidentalType(AccidentalType::NONE);
+                              differentAccidentals = true;
+                              }
+                        }
+                  else {
+                        setAccidentalType(n->accidentalType());
+                        n1 = n;
+                        }
+                  }
+
+            if (ChordRest* cr = chordRest(e)) {
+                  if (cr1) {
+                        if (cr->durationType() != cr1->durationType()) {
+                              setDuration(TDuration::DurationType::V_INVALID);
+                              differentDurations = true;
+                              }
+                        if ((cr->isRest() && !cr1->isRest()) || (!cr->isRest() && cr1->isRest())) {
+                              setRest(false);
+                              chordsAndRests = true;
+                              }
+                        }
+                  else {
+                        setDuration(cr->durationType());
+                        setRest(cr->isRest());
+                        cr1 = cr;
+                        }
+                  }
+
+            if (differentAccidentals && differentDurations && chordsAndRests)
+                  break;
+            }
+
+      Element* e = selection.element();
       if (e == 0)
             return;
-      if (e && e->type() == Element::Type::CHORD)
-            e = static_cast<Chord*>(e)->upNote();
+
+      ChordRest* cr = chordRest(e);
+      Note* n = note(e);
+      if (!n && cr && cr->isChord())
+            n = toChord(cr)->upNote();
+
+      if (cr) {
+            setTrack(cr->track());
+            setNoteType(n ? n->noteType() : NoteType::NORMAL);
+            setBeamMode(cr->beamMode());
+            }
 
       setDrumNote(-1);
-      if (e->type() == Element::Type::NOTE) {
-            Note* note    = static_cast<Note*>(e);
-            Chord* chord  = note->chord();
-            setDuration(chord->durationType());
-            setRest(false);
-            setTrack(note->track());
-            setNoteType(note->noteType());
-            setBeamMode(chord->beamMode());
-            }
-      else if (e->type() == Element::Type::REST) {
-            Rest* rest   = static_cast<Rest*>(e);
-            if (rest->durationType().type() == TDuration::DurationType::V_MEASURE)
-                  setDuration(TDuration::DurationType::V_QUARTER);
-            else
-                  setDuration(rest->durationType());
-            setRest(true);
-            setTrack(rest->track());
-            setBeamMode(rest->beamMode());
-            setNoteType(NoteType::NORMAL);
-            }
-      if (e->type() == Element::Type::NOTE || e->type() == Element::Type::REST) {
-            const Instrument* instr = e->part()->instrument();
-            if (instr->useDrumset()) {
-                  if (e->type() == Element::Type::NOTE)
-                        setDrumNote(static_cast<Note*>(e)->pitch());
-                  else
-                        setDrumNote(-1);
-                  }
+      if (n) {
+            const Instrument* instr = n->part()->instrument();
+            if (instr->useDrumset())
+                  setDrumNote(n->pitch());
             }
       }
 
@@ -117,13 +192,14 @@ void InputState::moveInputPos(Element* e)
 
       Segment* s;
       if (e->isChordRest())
-            s = static_cast<ChordRest*>(e)->segment();
+            s = toChordRest(e)->segment();
       else
-            s = static_cast<Segment*>(e);
-      if (s->type() == Element::Type::SEGMENT) {
+            s = toSegment(e);
+
+      if (s->isSegment()) {
             if (s->measure()->isMMRest()) {
                   Measure* m = s->measure()->mmRestFirst();
-                  s = m->findSegment(Segment::Type::ChordRest, m->tick());
+                  s = m->findSegment(SegmentType::ChordRest, m->tick());
                   }
             _lastSegment = _segment;
             _segment = s;
@@ -138,7 +214,7 @@ void InputState::setSegment(Segment* s)
       {
       if (s && s->measure()->isMMRest()) {
             Measure* m = s->measure()->mmRestFirst();
-            s = m->findSegment(Segment::Type::ChordRest, m->tick());
+            s = m->findSegment(SegmentType::ChordRest, m->tick());
             }
       _segment = s;
       _lastSegment = s;
@@ -151,9 +227,15 @@ void InputState::setSegment(Segment* s)
 Segment* InputState::nextInputPos() const
       {
       Measure* m = _segment->measure();
-      Segment* s = _segment->next1(Segment::Type::ChordRest);
-      for (; s; s = s->next1(Segment::Type::ChordRest)) {
-            if (s->element(_track) || s->measure() != m)
+      Segment* s = _segment->next1(SegmentType::ChordRest);
+      for (; s; s = s->next1(SegmentType::ChordRest)) {
+            if (s->element(_track)) {
+                  if (s->element(_track)->isRest() && toRest(s->element(_track))->isGap())
+                        m = s->measure();
+                  else
+                        return s;
+                  }
+            else if (s->measure() != m)
                   return s;
             }
       return 0;

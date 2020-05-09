@@ -48,24 +48,24 @@ struct BEDrawingDataY;
 //    dummy element, used for drag&drop
 //---------------------------------------------------------
 
-class BagpipeEmbellishment : public Element {
-      Q_OBJECT
-
+class BagpipeEmbellishment final : public Element {
       int _embelType;
       void drawGraceNote(QPainter*, const BEDrawingDataX&, const BEDrawingDataY&,
          SymId, const qreal x, const bool drawFlag) const;
 
    public:
       BagpipeEmbellishment(Score* s) : Element(s), _embelType(0) { }
-      virtual BagpipeEmbellishment* clone() const override { return new BagpipeEmbellishment(*this); }
-      virtual Element::Type type() const override          { return Element::Type::BAGPIPE_EMBELLISHMENT;           }
-      int embelType() const                       { return _embelType;                      }
-      void setEmbelType(int val)                  { _embelType = val;                       }
-      virtual qreal mag() const override;
-      virtual void write(Xml&) const override;
-      virtual void read(XmlReader&) override;
-      virtual void layout() override;
-      virtual void draw(QPainter*) const override;
+
+      BagpipeEmbellishment* clone() const override { return new BagpipeEmbellishment(*this); }
+      ElementType type() const override            { return ElementType::BAGPIPE_EMBELLISHMENT;           }
+
+      int embelType() const                                { return _embelType;                      }
+      void setEmbelType(int val)                           { _embelType = val;                       }
+      qreal mag() const override;
+      void write(XmlWriter&) const override;
+      void read(XmlReader&) override;
+      void layout() override;
+      void draw(QPainter*) const override;
       static BagpipeEmbellishmentInfo BagpipeEmbellishmentList[];
       static int nEmbellishments();
       static BagpipeNoteInfo BagpipeNoteInfoList[];

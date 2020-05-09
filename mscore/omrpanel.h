@@ -1,7 +1,6 @@
 //=============================================================================
 //  MuseScore
 //  Music Composition & Notation
-//  $Id:$
 //
 //  Copyright (C) 2011 Werner Schweer and others
 //
@@ -10,6 +9,8 @@
 //  as published by the Free Software Foundation and appearing in
 //  the file LICENSE.GPL
 //=============================================================================
+
+#include "config.h"
 
 #ifdef OMR
 
@@ -53,9 +54,9 @@ class OmrPanel : public QDockWidget {
    public:
       OmrPanel(QWidget* parent = 0);
       void setOmrView(OmrView*);
-      };
+   };
 
 
-} // namespace Ms
+}// namespace Ms
 #endif
 #endif

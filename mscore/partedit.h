@@ -1,7 +1,6 @@
 //=============================================================================
 //  MuseScore
 //  Linux Music Score Editor
-//  $Id: partedit.h 2278 2009-10-30 16:56:11Z wschweer $
 //
 //  Copyright (C) 2002-2009 Werner Schweer and others
 //
@@ -36,7 +35,7 @@ class Part;
 //---------------------------------------------------------
 
 class PartEdit : public QWidget, public Ui::PartEditBase {
-      Q_OBJECT
+      //Q_OBJECT
 
       Channel* channel;
       Part* part;
@@ -68,7 +67,7 @@ class PartEdit : public QWidget, public Ui::PartEditBase {
 
 class InstrumentListEditor : public QScrollArea
       {
-      Q_OBJECT
+      //Q_OBJECT
       Score*       cs;
       QScrollArea* sa;
       QVBoxLayout* vb;

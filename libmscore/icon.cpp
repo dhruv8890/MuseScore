@@ -12,6 +12,7 @@
 
 #include "xml.h"
 #include "icon.h"
+#include "property.h"
 
 namespace Ms {
 
@@ -19,9 +20,9 @@ namespace Ms {
 //   write
 //---------------------------------------------------------
 
-void Icon::write(Xml& xml) const
+void Icon::write(XmlWriter& xml) const
       {
-      xml.stag(name());
+      xml.stag(this);
       xml.tag("subtype", int(_iconType));
       if (!_action.isEmpty())
             xml.tag("action", _action.data());
@@ -45,5 +46,54 @@ void Icon::read(XmlReader& e)
             }
       }
 
-}
+//---------------------------------------------------------
+//   layout
+//---------------------------------------------------------
 
+void Icon::layout()
+      {
+      setbbox(QRectF(0, 0, _extent, _extent));
+      }
+
+//---------------------------------------------------------
+//   draw
+//---------------------------------------------------------
+
+void Icon::draw(QPainter* p) const
+      {
+      QPixmap pm(_icon.pixmap(_extent, QIcon::Normal, QIcon::On));
+      p->drawPixmap(0, 0, pm);
+      }
+
+//---------------------------------------------------------
+//   Icon::getProperty
+//---------------------------------------------------------
+
+QVariant Icon::getProperty(Pid pid) const
+      {
+      switch (pid) {
+            case Pid::ACTION:
+                  return action();
+            default:
+                  break;
+            }
+      return Element::getProperty(pid);
+      }
+
+//---------------------------------------------------------
+//   Icon::setProperty
+//---------------------------------------------------------
+
+bool Icon::setProperty(Pid pid, const QVariant& v)
+      {
+      switch (pid) {
+            case Pid::ACTION:
+                  _action = v.toString().toLatin1();
+                  triggerLayout();
+                  break;
+            default:
+                  return Element::setProperty(pid, v);
+            }
+      return true;
+      }
+}

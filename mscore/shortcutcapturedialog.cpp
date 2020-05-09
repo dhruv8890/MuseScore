@@ -1,7 +1,6 @@
 //=============================================================================
 //  MusE Score
 //  Linux Music Score Editor
-//  $Id: shortcutcapturedialog.cpp 5537 2012-04-16 07:55:10Z wschweer $
 //
 //  Copyright (C) 2002-2007 Werner Schweer and others
 //  Copyright (C) 2003 Mathias Lundgren (lunar_shuttle@users.sourceforge.net)
@@ -32,6 +31,7 @@ namespace Ms {
 ShortcutCaptureDialog::ShortcutCaptureDialog(Shortcut* _s, QMap<QString, Shortcut*> ls, QWidget* parent)
    : QDialog(parent)
       {
+      setObjectName("ShortcutCaptureDialog");
       setupUi(this);
       setWindowFlags(this->windowFlags() & ~Qt::WindowContextHelpButtonHint);
       localShortcuts = ls;
@@ -48,6 +48,7 @@ ShortcutCaptureDialog::ShortcutCaptureDialog(Shortcut* _s, QMap<QString, Shortcu
       clearClicked();
 
       nshrtLabel->installEventFilter(this);
+      MuseScore::restoreGeometry(this);
       }
 
 //---------------------------------------------------------
@@ -116,7 +117,7 @@ void ShortcutCaptureDialog::keyPress(QKeyEvent* e)
       // remove shift-modifier for keys that don't need it: letters and special keys
       if ((k & Qt::ShiftModifier) && ((e->key() < 0x41) || (e->key() > 0x5a) || (e->key() >= 0x01000000))) {
             qDebug() << k;
-      	k -= Qt::ShiftModifier;
+            k -= Qt::ShiftModifier;
             qDebug() << k;
             }
 
@@ -134,14 +135,25 @@ void ShortcutCaptureDialog::keyPress(QKeyEvent* e)
       bool conflict = false;
       QString msgString;
 
-      foreach (Shortcut* ss, localShortcuts) {
+      for (Shortcut* ss : localShortcuts) {
             if (s == ss)
                   continue;
             if (!(s->state() & ss->state()))    // no conflict if states do not overlap
                   continue;
-            foreach(const QKeySequence& ks, ss->keys()) {
+
+            QList<QKeySequence> skeys = QKeySequence::keyBindings(ss->standardKey());
+
+            for (const QKeySequence& ks : skeys) {
                   if (ks == key) {
-                        msgString = tr("Shortcut conflicts with ") + ss->descr();
+                        msgString = tr("Shortcut conflicts with %1").arg(ss->descr());
+                        conflict = true;
+                        break;
+                        }
+                  }
+
+            for (const QKeySequence& ks : ss->keys()) {
+                  if (ks == key) {
+                        msgString = tr("Shortcut conflicts with %1").arg(ss->descr());
                         conflict = true;
                         break;
                         }
@@ -162,21 +174,21 @@ void ShortcutCaptureDialog::keyPress(QKeyEvent* e)
             }
       addButton->setEnabled(conflict == false);
       replaceButton->setEnabled(conflict == false);
+
 //      nshrtLabel->setText(key.toString(QKeySequence::NativeText));
       QString keyStr = Shortcut::keySeqToString(key, QKeySequence::NativeText);
       nshrtLabel->setText(keyStr);
-
 //      QString A = key.toString(QKeySequence::NativeText);
       QString A = keyStr;
       QString B = Shortcut::keySeqToString(key, QKeySequence::PortableText);
-qDebug("capture key 0x%x  modifiers 0x%x virt 0x%x scan 0x%x <%s><%s>",
-      k,
-      int(e->modifiers()),
-      int(e->nativeVirtualKey()),
-      int(e->nativeScanCode()),
-      qPrintable(A),
-      qPrintable(B)
-      );
+      qDebug("capture key 0x%x  modifiers 0x%x virt 0x%x scan 0x%x <%s><%s>",
+            k,
+            int(e->modifiers()),
+            int(e->nativeVirtualKey()),
+            int(e->nativeScanCode()),
+            qPrintable(A),
+            qPrintable(B)
+            );
       }
 
 //---------------------------------------------------------
@@ -189,10 +201,23 @@ void ShortcutCaptureDialog::clearClicked()
             nshrtLabel->setAccessibleName(tr("New shortcut"));
 
       nshrtLabel->setAccessibleName(tr("New shortcut"));
+      messageLabel->setText("");
       addButton->setEnabled(false);
       replaceButton->setEnabled(false);
       nshrtLabel->setText("");
       key = 0;
+      nshrtLabel->setFocus();
       }
-}
+
+//---------------------------------------------------------
+//   hideEvent
+//---------------------------------------------------------
+
+void ShortcutCaptureDialog::hideEvent(QHideEvent* event)
+      {
+      MuseScore::saveGeometry(this);
+      QWidget::hideEvent(event);
+      }
+
+} // namespace Ms
 

@@ -1,7 +1,6 @@
 //=============================================================================
 //  MusE Score
 //  Linux Music Score Editor
-//  $Id:$
 //
 //  Copyright (C) 2011 Werner Schweer and others
 //
@@ -80,7 +79,7 @@ class MyWebPage: public QWebPage
 
 class MyWebView: public QWebView
       {
-      //Q_OBJECT
+      Q_OBJECT
 
       MyWebPage m_page;
       QProgressBar* progressBar;

@@ -15,15 +15,20 @@
  Implementation of class Selection plus other selection related functions.
 */
 
+#include "log.h"
+
 #include "mscore.h"
 #include "arpeggio.h"
 #include "barline.h"
 #include "beam.h"
 #include "chord.h"
+#include "dynamic.h"
 #include "element.h"
 #include "figuredbass.h"
 #include "glissando.h"
+#include "hairpin.h"
 #include "harmony.h"
+#include "fret.h"
 #include "hook.h"
 #include "input.h"
 #include "limits.h"
@@ -43,7 +48,6 @@
 #include "tie.h"
 #include "system.h"
 #include "text.h"
-#include "textline.h"
 #include "tremolo.h"
 #include "tuplet.h"
 #include "utils.h"
@@ -51,6 +55,7 @@
 #include "staff.h"
 #include "part.h"
 #include "accidental.h"
+#include "articulation.h"
 
 namespace Ms {
 
@@ -68,23 +73,25 @@ Selection::Selection(Score* s)
       _staffStart    = 0;
       _staffEnd      = 0;
       _activeTrack   = 0;
+      _currentTick   = Fraction(-1, 1);
+      _currentTrack  = 0;
       }
 
 //---------------------------------------------------------
 //   tickStart
 //---------------------------------------------------------
 
-int Selection::tickStart() const
+Fraction Selection::tickStart() const
       {
       switch (_state) {
             case SelState::RANGE:
-                  return _startSegment->tick();
+                  return _startSegment ? _startSegment->tick() : Fraction(-1,1);
             case SelState::LIST: {
                   ChordRest* cr = firstChordRest();
-                  return (cr) ? cr->tick() : -1;
+                  return (cr) ? cr->tick() : Fraction(-1,1);
                   }
             default:
-                  return -1;
+                  return Fraction(-1,1);
             }
       }
 
@@ -92,26 +99,25 @@ int Selection::tickStart() const
 //   tickEnd
 //---------------------------------------------------------
 
-int Selection::tickEnd() const
+Fraction Selection::tickEnd() const
       {
       switch (_state) {
             case SelState::RANGE: {
-                  if (_endSegment) {
+                  if (_endSegment)
                         return _endSegment->tick();
-                        }
                   else { // endsegment == 0 if end of score
                       Measure* m = _score->lastMeasure();
-                      return m->tick() + m->ticks();
+                      return m->endTick();
                       }
                   break;
                   }
             case SelState::LIST: {
                   ChordRest* cr = lastChordRest();
-                  return (cr) ? cr->tick() : -1;
+                  return (cr) ? cr->segment()->tick() : Fraction(-1,1);
                   break;
                   }
             default:
-                  return -1;
+                  return Fraction(-1,1);
             }
       }
 
@@ -128,7 +134,8 @@ bool Selection::isStartActive() const
 //   isEndActive
 //---------------------------------------------------------
 
-bool Selection::isEndActive() const {
+bool Selection::isEndActive() const
+      {
       return activeSegment() && activeSegment()->tick() == tickEnd();
       }
 
@@ -138,8 +145,9 @@ bool Selection::isEndActive() const {
 
 Element* Selection::element() const
       {
-      return _el.size() == 1 ? _el[0] : 0;
+      return ((state() != SelState::RANGE) && (_el.size() == 1)) ? _el[0] : 0;
       }
+
 //---------------------------------------------------------
 //   cr
 //---------------------------------------------------------
@@ -149,11 +157,34 @@ ChordRest* Selection::cr() const
       Element* e = element();
       if (!e)
             return 0;
-      if (e->type() == Element::Type::NOTE)
+      if (e->isNote())
             e = e->parent();
       if (e->isChordRest())
-            return static_cast<ChordRest*>(e);
+            return toChordRest(e);
       return 0;
+      }
+
+//---------------------------------------------------------
+//   currentCR
+//---------------------------------------------------------
+
+ChordRest* Selection::currentCR() const
+      {
+      // no selection yet - start at very beginning, not first cr
+      if (_currentTick == Fraction(-1, 1))
+            return nullptr;
+      Segment* s = score()->tick2rightSegment(_currentTick, true);
+      if (!s)
+            return nullptr;
+      int track = _currentTrack;
+      // staff may have been removed - start at top
+      if (track < 0 || track >= score()->ntracks())
+            track = 0;
+      Element* e = s->element(track);
+      if (e && e->isChordRest())
+            return toChordRest(e);
+      else
+            return nullptr;
       }
 
 //---------------------------------------------------------
@@ -172,10 +203,13 @@ ChordRest* Selection::activeCR() const
 
 Segment* Selection::firstChordRestSegment() const
       {
-      if (!isRange()) return 0;
+      if (!isRange())
+            return 0;
 
       for (Segment* s = _startSegment; s && (s != _endSegment); s = s->next1MM()) {
-            if (s->segmentType() == Segment::Type::ChordRest)
+            if (!s->enabled())
+                  continue;
+            if (s->isChordRestType())
                   return s;
             }
       return 0;
@@ -189,25 +223,25 @@ ChordRest* Selection::firstChordRest(int track) const
       {
       if (_el.size() == 1) {
             Element* el = _el[0];
-            if (el->type() == Element::Type::NOTE)
-                  return static_cast<ChordRest*>(el->parent());
-            else if (el->type() == Element::Type::REST)
-                  return static_cast<ChordRest*>(el);
+            if (el->isNote())
+                  return toChordRest(el->parent());
+            else if (el->isRest())
+                  return toChordRest(el);
             return 0;
             }
       ChordRest* cr = 0;
-      foreach (Element* el, _el) {
-            if (el->type() == Element::Type::NOTE)
+      for (Element* el : _el) {
+            if (el->isNote())
                   el = el->parent();
             if (el->isChordRest()) {
                   if (track != -1 && el->track() != track)
                         continue;
                   if (cr) {
-                        if (static_cast<ChordRest*>(el)->tick() < cr->tick())
-                              cr = static_cast<ChordRest*>(el);
+                        if (toChordRest(el)->tick() < cr->tick())
+                              cr = toChordRest(el);
                         }
                   else
-                        cr = static_cast<ChordRest*>(el);
+                        cr = toChordRest(el);
                   }
             }
       return cr;
@@ -221,25 +255,25 @@ ChordRest* Selection::lastChordRest(int track) const
       {
       if (_el.size() == 1) {
             Element* el = _el[0];
-            if (el && el->type() == Element::Type::NOTE)
-                  return static_cast<ChordRest*>(el->parent());
-            else if (el->type() == Element::Type::CHORD || el->type() == Element::Type::REST || el->type() == Element::Type::REPEAT_MEASURE)
-                  return static_cast<ChordRest*>(el);
+            if (el && el->isNote())
+                  return toChordRest(el->parent());
+            else if (el->isChord() || el->isRest() || el->isRepeatMeasure())
+                  return toChordRest(el);
             return 0;
             }
       ChordRest* cr = 0;
       for (auto el : _el) {
-            if (el->type() == Element::Type::NOTE)
-                  el = ((Note*)el)->chord();
-            if (el->isChordRest() && static_cast<ChordRest*>(el)->segment()->segmentType() == Segment::Type::ChordRest) {
+            if (el->isNote())
+                  el = toNote(el)->chord();
+            if (el->isChordRest() && toChordRest(el)->segment()->isChordRestType()) {
                   if (track != -1 && el->track() != track)
                         continue;
                   if (cr) {
-                        if (((ChordRest*)el)->tick() >= cr->tick())
-                              cr = (ChordRest*)el;
+                        if (toChordRest(el)->tick() >= cr->tick())
+                              cr = toChordRest(el);
                         }
                   else
-                        cr = (ChordRest*)el;
+                        cr = toChordRest(el);
                   }
             }
       return cr;
@@ -254,7 +288,7 @@ Measure* Selection::findMeasure() const
       Measure *m = 0;
       if (_el.size() > 0) {
             Element* el = _el[0];
-            m = static_cast<Measure*>(el->findMeasure());
+            m = toMeasure(el->findMeasure());
             }
       return m;
       }
@@ -289,9 +323,15 @@ static QRectF changeSelection(Element* e, bool b)
 
 void Selection::clear()
       {
+
+      IF_ASSERT_FAILED(!isLocked()) {
+            LOGE() << "selection locked, reason: " << lockReason();
+            return;
+            }
+
       for (Element* e : _el) {
             if (e->isSpanner()) {   // TODO: only visible elements should be selectable?
-                  Spanner* sp = static_cast<Spanner*>(e);
+                  Spanner* sp = toSpanner(e);
                   for (auto s : sp->spannerSegments())
                         e->score()->addRefresh(changeSelection(s, false));
                   }
@@ -314,9 +354,10 @@ void Selection::clear()
 
 void Selection::remove(Element* el)
       {
-      _el.removeOne(el);
+      const bool removed = _el.removeOne(el);
       el->setSelected(false);
-      updateState();
+      if (removed)
+            updateState();
       }
 
 //---------------------------------------------------------
@@ -325,50 +366,59 @@ void Selection::remove(Element* el)
 
 void Selection::add(Element* el)
       {
+      IF_ASSERT_FAILED(!isLocked()) {
+            LOGE() << "selection locked, reason: " << lockReason();
+            return;
+            }
       _el.append(el);
       update();
       }
 
 //---------------------------------------------------------
 //   canSelect
+//   see also `static const char* labels[]` in selectionwindow.cpp
 //---------------------------------------------------------
 
 bool SelectionFilter::canSelect(const Element* e) const
       {
-      if (e->type() == Element::Type::DYNAMIC || e->type() == Element::Type::HAIRPIN)
-          return isFiltered(SelectionFilterType::DYNAMIC);
-      if (e->type() == Element::Type::ARTICULATION || e->type() == Element::Type::TRILL)
-          return isFiltered(SelectionFilterType::ARTICULATION);
-      if (e->type() == Element::Type::LYRICS)
-          return isFiltered(SelectionFilterType::LYRICS);
-      if (e->type() == Element::Type::FINGERING)
-          return isFiltered(SelectionFilterType::FINGERING);
-      if (e->type() == Element::Type::HARMONY)
-          return isFiltered(SelectionFilterType::CHORD_SYMBOL);
-      if (e->type() == Element::Type::SLUR)
-          return isFiltered(SelectionFilterType::SLUR);
-      if (e->type() == Element::Type::FIGURED_BASS)
-          return isFiltered(SelectionFilterType::FIGURED_BASS);
-      if (e->type() == Element::Type::OTTAVA)
-          return isFiltered(SelectionFilterType::OTTAVA);
-      if (e->type() == Element::Type::PEDAL)
-          return isFiltered(SelectionFilterType::PEDAL_LINE);
-      if (e->type() == Element::Type::ARPEGGIO)
-          return isFiltered(SelectionFilterType::ARPEGGIO);
-      if (e->type() == Element::Type::GLISSANDO)
-          return isFiltered(SelectionFilterType::GLISSANDO);
-      if (e->type() == Element::Type::FRET_DIAGRAM)
-          return isFiltered(SelectionFilterType::FRET_DIAGRAM);
-      if (e->type() == Element::Type::BREATH)
-          return isFiltered(SelectionFilterType::BREATH);
-      if (e->isText()) // only TEXT, INSTRCHANGE and STAFFTEXT are caught here, rest are system thus not in selection
-          return isFiltered(SelectionFilterType::OTHER_TEXT);
+      if (e->isDynamic())
+            return isFiltered(SelectionFilterType::DYNAMIC);
+      if (e->isHairpin())
+            return isFiltered(SelectionFilterType::HAIRPIN);
+      if ((e->isArticulation() && !toArticulation(e)->isOrnament()) || e->isVibrato() || e->isFermata())
+            return isFiltered(SelectionFilterType::ARTICULATION);
+      if ((e->isArticulation() && toArticulation(e)->isOrnament()) || e->isTrill())
+            return isFiltered(SelectionFilterType::ORNAMENT);
+      if (e->type() == ElementType::LYRICS)
+            return isFiltered(SelectionFilterType::LYRICS);
+      if (e->type() == ElementType::FINGERING)
+            return isFiltered(SelectionFilterType::FINGERING);
+      if (e->type() == ElementType::HARMONY)
+            return isFiltered(SelectionFilterType::CHORD_SYMBOL);
+      if (e->type() == ElementType::SLUR)
+            return isFiltered(SelectionFilterType::SLUR);
+      if (e->type() == ElementType::FIGURED_BASS)
+            return isFiltered(SelectionFilterType::FIGURED_BASS);
+      if (e->type() == ElementType::OTTAVA)
+            return isFiltered(SelectionFilterType::OTTAVA);
+      if (e->type() == ElementType::PEDAL)
+            return isFiltered(SelectionFilterType::PEDAL_LINE);
+      if (e->type() == ElementType::ARPEGGIO)
+            return isFiltered(SelectionFilterType::ARPEGGIO);
+      if (e->type() == ElementType::GLISSANDO)
+            return isFiltered(SelectionFilterType::GLISSANDO);
+      if (e->type() == ElementType::FRET_DIAGRAM)
+            return isFiltered(SelectionFilterType::FRET_DIAGRAM);
+      if (e->type() == ElementType::BREATH)
+            return isFiltered(SelectionFilterType::BREATH);
+      if (e->isTextBase()) // only TEXT, INSTRCHANGE and STAFFTEXT are caught here, rest are system thus not in selection
+            return isFiltered(SelectionFilterType::OTHER_TEXT);
       if (e->isSLine()) // NoteLine, Volta
-          return isFiltered(SelectionFilterType::OTHER_LINE);
-      if (e->type() == Element::Type::TREMOLO && !static_cast<const Tremolo*>(e)->twoNotes())
-          return isFiltered(SelectionFilterType::TREMOLO);
-      if (e->type() == Element::Type::CHORD && static_cast<const Chord*>(e)->isGrace())
-          return isFiltered(SelectionFilterType::GRACE_NOTE);
+            return isFiltered(SelectionFilterType::OTHER_LINE);
+      if (e->isTremolo())
+            return isFiltered(SelectionFilterType::TREMOLO);
+      if (e->isChord() && toChord(e)->isGrace())
+            return isFiltered(SelectionFilterType::GRACE_NOTE);
       return true;
       }
 
@@ -380,10 +430,14 @@ bool SelectionFilter::canSelectVoice(int track) const
       {
       int voice = track % VOICES;
       switch (voice) {
-            case 0: return isFiltered(SelectionFilterType::FIRST_VOICE);
-            case 1: return isFiltered(SelectionFilterType::SECOND_VOICE);
-            case 2: return isFiltered(SelectionFilterType::THIRD_VOICE);
-            case 3: return isFiltered(SelectionFilterType::FOURTH_VOICE);
+            case 0:
+                  return isFiltered(SelectionFilterType::FIRST_VOICE);
+            case 1:
+                  return isFiltered(SelectionFilterType::SECOND_VOICE);
+            case 2:
+                  return isFiltered(SelectionFilterType::THIRD_VOICE);
+            case 3:
+                  return isFiltered(SelectionFilterType::FOURTH_VOICE);
             }
       return true;
       }
@@ -394,6 +448,10 @@ bool SelectionFilter::canSelectVoice(int track) const
 
 void Selection::appendFiltered(Element* e)
       {
+      IF_ASSERT_FAILED(!isLocked()) {
+            LOGE() << "selection locked, reason: " << lockReason();
+            return;
+            }
       if (selectionFilter().canSelect(e))
             _el.append(e);
       }
@@ -404,27 +462,44 @@ void Selection::appendFiltered(Element* e)
 
 void Selection::appendChord(Chord* chord)
       {
-      if (chord->beam() && !_el.contains(chord->beam())) _el.append(chord->beam());
-      if (chord->stem()) _el.append(chord->stem());
-      if (chord->hook()) _el.append(chord->hook());
-      if (chord->arpeggio()) appendFiltered(chord->arpeggio());
-//      if (chord->glissando()) appendFiltered(chord->glissando());
-      if (chord->stemSlash()) _el.append(chord->stemSlash());
-      if (chord->tremolo()) appendFiltered(chord->tremolo());
-      foreach(Note* note, chord->notes()) {
+      IF_ASSERT_FAILED(!isLocked()) {
+            LOGE() << "selection locked, reason: " << lockReason();
+            return;
+            }
+      if (chord->beam() && !_el.contains(chord->beam()))
+            _el.append(chord->beam());
+      if (chord->stem())
+            _el.append(chord->stem());
+      if (chord->hook())
+            _el.append(chord->hook());
+      if (chord->arpeggio())
+            appendFiltered(chord->arpeggio());
+      if (chord->stemSlash())
+            _el.append(chord->stemSlash());
+      if (chord->tremolo())
+            appendFiltered(chord->tremolo());
+      for (Note* note : chord->notes()) {
             _el.append(note);
             if (note->accidental()) _el.append(note->accidental());
             foreach(Element* el, note->el())
                   appendFiltered(el);
-            for (int x = 0; x < MAX_DOTS; x++)
-                  if (note->dot(x) != 0) _el.append(note->dot(x));
+            for (NoteDot* dot : note->dots())
+                  _el.append(dot);
 
             if (note->tieFor() && (note->tieFor()->endElement() != 0)) {
-                  if (note->tieFor()->endElement()->type() == Element::Type::NOTE) {
-                        Note* endNote = static_cast<Note*>(note->tieFor()->endElement());
+                  if (note->tieFor()->endElement()->isNote()) {
+                        Note* endNote = toNote(note->tieFor()->endElement());
                         Segment* s = endNote->chord()->segment();
-                        if (_endSegment && (s->tick() < _endSegment->tick()))
+                        if (s->tick() < tickEnd())
                               _el.append(note->tieFor());
+                        }
+                  }
+            for (Spanner* sp : note->spannerFor()) {
+                  if (sp->endElement()->isNote()) {
+                        Note* endNote = toNote(sp->endElement());
+                        Segment* s = endNote->chord()->segment();
+                        if (s->tick() < tickEnd())
+                              _el.append(sp);
                         }
                   }
             }
@@ -436,7 +511,38 @@ void Selection::appendChord(Chord* chord)
 
 void Selection::updateSelectedElements()
       {
-      foreach(Element* e, _el)
+      IF_ASSERT_FAILED(!isLocked()) {
+            LOGE() << "selection locked, reason: " << lockReason();
+            return;
+            }
+      if (_state != SelState::RANGE) {
+            update();
+            return;
+            }
+      if (_state == SelState::RANGE && _plannedTick1 != Fraction(-1,1) && _plannedTick2 != Fraction(-1,1)) {
+            const int staffStart = _staffStart;
+            const int staffEnd = _staffEnd;
+            deselectAll();
+            Segment* s1 = _score->tick2segmentMM(_plannedTick1);
+            Segment* s2 = _score->tick2segmentMM(_plannedTick2, /* first */ true);
+            if (s2 && s2->measure()->isMMRest())
+                  s2 = s2->prev1MM(); // HACK both this and the previous "true"
+                                      // are needed to prevent bug #173381.
+                                      // This should exclude any segments belonging
+                                      // to MM-rest range from the selection.
+            if (s1 && s2 && s1->tick() + s1->ticks() > s2->tick()) {
+                  // can happen with MM rests as tick2measure returns only
+                  // the first segment for them.
+                  return;
+                  }
+            if (s2 && s2 == s2->measure()->first())
+                  s2 = s2->prev1();   // we want the last segment of the previous measure
+            setRange(s1, s2, staffStart, staffEnd);
+            _plannedTick1 = Fraction(-1,1);
+            _plannedTick2 = Fraction(-1,1);
+            }
+
+      for (Element* e : _el)
             e->setSelected(false);
       _el.clear();
 
@@ -455,59 +561,61 @@ void Selection::updateSelectedElements()
             if (!canSelectVoice(st))
                   continue;
             for (Segment* s = _startSegment; s && (s != _endSegment); s = s->next1MM()) {
-                  if (s->segmentType() == Segment::Type::EndBarLine)  // do not select end bar line
+                  if (!s->enabled() || s->isEndBarLineType())  // do not select end bar line
                         continue;
-                  foreach(Element* e, s->annotations()) {
+                  for (Element* e : s->annotations()) {
                         if (e->track() != st)
-                              continue;
-                        if (e->systemFlag()) //exclude system text
                               continue;
                         appendFiltered(e);
                         }
                   Element* e = s->element(st);
-                  if (!e)
-                        continue;
-                  if (e->generated())
-                        continue;
-                  if (e->type() == Element::Type::TIMESIG)
-                        continue;
-                  if (e->type() == Element::Type::KEYSIG)
+                  if (!e || e->generated() || e->isTimeSig() || e->isKeySig())
                         continue;
                   if (e->isChordRest()) {
-                        ChordRest* cr = static_cast<ChordRest*>(e);
-                        for (Element* e : cr->lyricsList()) {
-                              if (e)
-                                    appendFiltered(e);
+                        ChordRest* cr = toChordRest(e);
+                        for (Element* el : cr->lyrics()) {
+                              if (el)
+                                    appendFiltered(el);
                               }
-                        foreach (Articulation* art, cr->articulations())
-                              appendFiltered(art);
                         }
-                  if (e->type() == Element::Type::CHORD) {
-                        Chord* chord = static_cast<Chord*>(e);
+                  if (e->isChord()) {
+                        Chord* chord = toChord(e);
                         for (Chord* graceNote : chord->graceNotes())
                               if (canSelect(graceNote)) appendChord(graceNote);
                         appendChord(chord);
+                        for (Articulation* art : chord->articulations())
+                              appendFiltered(art);
                         }
                   else {
                         appendFiltered(e);
+                        if (e->isRest()) {
+                              Rest* r = toRest(e);
+                              for (int i = 0; i < r->dots(); ++i)
+                                    appendFiltered(r->dot(i));
+                              }
                         }
                   }
             }
-      int stick = startSegment()->tick();
-      int etick = tickEnd();
+      Fraction stick = startSegment()->tick();
+      Fraction etick = tickEnd();
 
-      for (auto i = score()->spanner().begin(); i != score()->spanner().end(); ++i) {
+      for (auto i = _score->spanner().begin(); i != _score->spanner().end(); ++i) {
             Spanner* sp = (*i).second;
             // ignore spanners belonging to other tracks
             if (sp->track() < startTrack || sp->track() >= endTrack)
                   continue;
-            // ignore voltas
-            if (sp->type() == Element::Type::VOLTA)
+            if (!canSelectVoice(sp->track()))
                   continue;
-            if (sp->type() == Element::Type::SLUR) {
-                if ((sp->tick() >= stick && sp->tick() < etick) || (sp->tick2() >= stick && sp->tick2() < etick))
-                      if (canSelect(sp->startCR()) && canSelect(sp->endCR()))
-                        appendFiltered(sp); // slur with start or end in range selection
+            // ignore voltas
+            if (sp->isVolta())
+                  continue;
+            if (sp->isSlur()) {
+                  // ignore if start & end elements not calculated yet
+                  if (!sp->startElement() || !sp->endElement())
+                        continue;
+                  if ((sp->tick() >= stick && sp->tick() < etick) || (sp->tick2() >= stick && sp->tick2() < etick))
+                        if (canSelect(sp->startCR()) && canSelect(sp->endCR()))
+                              appendFiltered(sp);     // slur with start or end in range selection
             }
             else if ((sp->tick() >= stick && sp->tick() < etick) && (sp->tick2() >= stick && sp->tick2() <= etick))
                   appendFiltered(sp); // spanner with start and end in range selection
@@ -522,10 +630,32 @@ void Selection::updateSelectedElements()
 void Selection::setRange(Segment* startSegment, Segment* endSegment, int staffStart, int staffEnd)
       {
       Q_ASSERT(staffEnd > staffStart && staffStart >= 0 && staffEnd >= 0 && staffEnd <= _score->nstaves());
+      Q_ASSERT(!(endSegment && !startSegment));
 
       _startSegment  = startSegment;
       _endSegment    = endSegment;
       _activeSegment = endSegment;
+      _staffStart    = staffStart;
+      _staffEnd      = staffEnd;
+      setState(SelState::RANGE);
+      }
+
+//---------------------------------------------------------
+//   setRangeTicks
+//    sets the range to be selected on next
+//    updateSelectedElements() call. Can be used if some
+//    segment structure changes are expected (e.g. if
+//    creating MM rests is pending).
+//---------------------------------------------------------
+
+void Selection::setRangeTicks(const Fraction& tick1, const Fraction& tick2, int staffStart, int staffEnd)
+      {
+      Q_ASSERT(staffEnd > staffStart && staffStart >= 0 && staffEnd >= 0 && staffEnd <= _score->nstaves());
+
+      deselectAll();
+      _plannedTick1 = tick1;
+      _plannedTick2 = tick2;
+      _startSegment = _endSegment = _activeSegment = nullptr;
       _staffStart    = staffStart;
       _staffEnd      = staffEnd;
       setState(SelState::RANGE);
@@ -572,8 +702,15 @@ void Selection::updateState()
             setState(SelState::NONE);
       else if (_state == SelState::NONE)
             setState(SelState::LIST);
-      if (!_score->noteEntryMode())
-             _score->inputState().update(e);
+      if (e) {
+            if (e->isSpannerSegment())
+                  _currentTick = toSpannerSegment(e)->spanner()->tick();
+            else
+                  _currentTick = e->tick();
+            // ignore system elements (e.g., frames)
+            if (e->track() >= 0)
+                  _currentTrack = e->track();
+            }
       }
 
 //---------------------------------------------------------
@@ -612,12 +749,8 @@ QByteArray Selection::mimeData() const
       QByteArray a;
       switch (_state) {
             case SelState::LIST:
-                  if (isSingle()) {
-                        Element* e = element();
-                        if (e->type() == Element::Type::TEXTLINE_SEGMENT)
-                              e = static_cast<TextLineSegment*>(e)->textLine();
-                        a = e->mimeData(QPointF());
-                        }
+                  if (isSingle())
+                        a = element()->mimeData(QPointF());
                   else
                         a = symbolListMimeData();
                   break;
@@ -637,6 +770,8 @@ QByteArray Selection::mimeData() const
 bool hasElementInTrack(Segment* startSeg, Segment* endSeg, int track)
       {
       for (Segment* seg = startSeg; seg != endSeg; seg = seg->next1MM()) {
+            if (!seg->enabled())
+                  continue;
             if (seg->element(track))
                   return true;
             }
@@ -647,13 +782,15 @@ bool hasElementInTrack(Segment* startSeg, Segment* endSeg, int track)
 //   firstElementInTrack
 //---------------------------------------------------------
 
-int firstElementInTrack(Segment* startSeg, Segment* endSeg, int track)
+static Fraction firstElementInTrack(Segment* startSeg, Segment* endSeg, int track)
       {
       for (Segment* seg = startSeg; seg != endSeg; seg = seg->next1MM()) {
+            if (!seg->enabled())
+                  continue;
             if (seg->element(track))
                   return seg->tick();
             }
-      return -1;
+      return Fraction(-1,1);
       }
 
 //---------------------------------------------------------
@@ -664,18 +801,18 @@ QByteArray Selection::staffMimeData() const
       {
       QBuffer buffer;
       buffer.open(QIODevice::WriteOnly);
-      Xml xml(&buffer);
+      XmlWriter xml(score(), &buffer);
       xml.header();
-      xml.clipboardmode = true;
+      xml.setClipboardmode(true);
       xml.setFilter(selectionFilter());
 
-      int ticks  = tickEnd() - tickStart();
+      Fraction ticks  = tickEnd() - tickStart();
       int staves = staffEnd() - staffStart();
       if (!MScore::testMode) {
-            xml.stag(QString("StaffList version=\"" MSC_VERSION "\" tick=\"%1\" len=\"%2\" staff=\"%3\" staves=\"%4\"").arg(tickStart()).arg(ticks).arg(staffStart()).arg(staves));
+            xml.stag(QString("StaffList version=\"" MSC_VERSION "\" tick=\"%1\" len=\"%2\" staff=\"%3\" staves=\"%4\"").arg(tickStart().ticks()).arg(ticks.ticks()).arg(staffStart()).arg(staves));
             }
       else {
-            xml.stag(QString("StaffList version=\"2.00\" tick=\"%1\" len=\"%2\" staff=\"%3\" staves=\"%4\"").arg(tickStart()).arg(ticks).arg(staffStart()).arg(staves));
+            xml.stag(QString("StaffList version=\"2.00\" tick=\"%1\" len=\"%2\" staff=\"%3\" staves=\"%4\"").arg(tickStart().ticks()).arg(ticks.ticks()).arg(staffStart()).arg(staves));
             }
       Segment* seg1 = _startSegment;
       Segment* seg2 = _endSegment;
@@ -686,21 +823,24 @@ QByteArray Selection::staffMimeData() const
 
             xml.stag(QString("Staff id=\"%1\"").arg(staffIdx));
 
-            Staff* staff = score()->staff(staffIdx);
+            Staff* staff = _score->staff(staffIdx);
             Part* part = staff->part();
             Interval interval = part->instrument(seg1->tick())->transpose();
             if (interval.chromatic)
                   xml.tag("transposeChromatic", interval.chromatic);
             if (interval.diatonic)
                   xml.tag("transposeDiatonic", interval.diatonic);
+            xml.stag("voiceOffset");
             for (int voice = 0; voice < VOICES; voice++) {
                   if (hasElementInTrack(seg1, seg2, startTrack + voice)
                      && xml.canWriteVoice(voice)) {
-                        int offset = firstElementInTrack(seg1, seg2, startTrack+voice) - tickStart();
-                        xml.tag(QString("voice id=\"%1\"").arg(voice), offset);
+                        Fraction offset = firstElementInTrack(seg1, seg2, startTrack+voice) - tickStart();
+                        xml.tag(QString("voice id=\"%1\"").arg(voice), offset.ticks());
                         }
                   }
-            score()->writeSegments(xml, startTrack, endTrack, seg1, seg2, false, true, true);
+            xml.etag(); // </voiceOffset>
+            xml.setCurTrack(startTrack);
+            _score->writeSegments(xml, startTrack, endTrack, seg1, seg2, false, false);
             xml.etag();
             }
 
@@ -715,26 +855,24 @@ QByteArray Selection::staffMimeData() const
 
 QByteArray Selection::symbolListMimeData() const
       {
-
-      struct MAPDATA {
+      struct MapData {
             Element* e;
             Segment* s;
             };
 
       QBuffer buffer;
       buffer.open(QIODevice::WriteOnly);
-      Xml xml(&buffer);
+      XmlWriter xml(score(), &buffer);
       xml.header();
-      xml.clipboardmode = true;
+      xml.setClipboardmode(true);
 
       int         topTrack    = 1000000;
       int         bottomTrack = 0;
-      Segment*    firstSeg    = nullptr;
-      int         firstTick   = 0x7FFFFFFF;
-      MAPDATA     mapData;
-      Segment*    seg         = nullptr;
-      int         track;
-      std::multimap<qint64, MAPDATA> map;
+      Segment*    firstSeg    = 0;
+      Fraction    firstTick   = Fraction(0x7FFFFFFF,1);
+      MapData     mapData;
+      Segment*    seg         = 0;
+      std::multimap<qint64, MapData> map;
 
       // scan selection element list, inserting relevant elements in a tick-sorted map
       foreach (Element* e, _el) {
@@ -743,120 +881,129 @@ QByteArray Selection::symbolListMimeData() const
 
 Enabling copying of more element types requires enabling pasting in Score::pasteSymbols() in libmscore/paste.cpp
 
-                  case Element::Type::SYMBOL:
-                  case Element::Type::TEXT:
-                  case Element::Type::INSTRUMENT_NAME:
-                  case Element::Type::SLUR_SEGMENT:
-                  case Element::Type::STAFF_LINES:
-                  case Element::Type::BAR_LINE:
-                  case Element::Type::STEM_SLASH:
-                  case Element::Type::LINE:
-                  case Element::Type::BRACKET:
-                  case Element::Type::ARPEGGIO:
-                  case Element::Type::ACCIDENTAL:
-                  case Element::Type::STEM:
-                  case Element::Type::NOTE:
-                  case Element::Type::CLEF:
-                  case Element::Type::KEYSIG:
-                  case Element::Type::TIMESIG:
-                  case Element::Type::REST:
-                  case Element::Type::BREATH:
-                  case Element::Type::GLISSANDO:
-                  case Element::Type::REPEAT_MEASURE:
-                  case Element::Type::IMAGE:
-                  case Element::Type::TIE:
-                  case Element::Type::CHORDLINE:
-                  case Element::Type::DYNAMIC:
-                  case Element::Type::BEAM:
-                  case Element::Type::HOOK:
-                  case Element::Type::MARKER:
-                  case Element::Type::JUMP:
-                  case Element::Type::FINGERING:
-                  case Element::Type::TUPLET:
-                  case Element::Type::TEMPO_TEXT:
-                  case Element::Type::STAFF_TEXT:
-                  case Element::Type::REHEARSAL_MARK:
-                  case Element::Type::INSTRUMENT_CHANGE:
-                  case Element::Type::FRET_DIAGRAM:
-                  case Element::Type::BEND:
-                  case Element::Type::TREMOLOBAR:
-                  case Element::Type::VOLTA:
-                  case Element::Type::HAIRPIN_SEGMENT:
-                  case Element::Type::OTTAVA_SEGMENT:
-                  case Element::Type::TRILL_SEGMENT:
-                  case Element::Type::TEXTLINE_SEGMENT:
-                  case Element::Type::VOLTA_SEGMENT:
-                  case Element::Type::PEDAL_SEGMENT:
-                  case Element::Type::LAYOUT_BREAK:
-                  case Element::Type::SPACER:
-                  case Element::Type::STAFF_STATE:
-                  case Element::Type::LEDGER_LINE:
-                  case Element::Type::NOTEHEAD:
-                  case Element::Type::NOTEDOT:
-                  case Element::Type::TREMOLO:
-                  case Element::Type::MEASURE:
-                  case Element::Type::SELECTION:
-                  case Element::Type::LASSO:
-                  case Element::Type::SHADOW_NOTE:
-                  case Element::Type::RUBBERBAND:
-                  case Element::Type::TAB_DURATION_SYMBOL:
-                  case Element::Type::FSYMBOL:
-                  case Element::Type::PAGE:
-                  case Element::Type::HAIRPIN:
-                  case Element::Type::OTTAVA:
-                  case Element::Type::PEDAL:
-                  case Element::Type::TRILL:
-                  case Element::Type::TEXTLINE:
-                  case Element::Type::NOTELINE:
-                  case Element::Type::SEGMENT:
-                  case Element::Type::SYSTEM:
-                  case Element::Type::COMPOUND:
-                  case Element::Type::CHORD:
-                  case Element::Type::SLUR:
-                  case Element::Type::ELEMENT:
-                  case Element::Type::ELEMENT_LIST:
-                  case Element::Type::STAFF_LIST:
-                  case Element::Type::MEASURE_LIST:
-                  case Element::Type::LAYOUT:
-                  case Element::Type::HBOX:
-                  case Element::Type::VBOX:
-                  case Element::Type::TBOX:
-                  case Element::Type::FBOX:
-                  case Element::Type::ICON:
-                  case Element::Type::OSSIA:
-                  case Element::Type::BAGPIPE_EMBELLISHMENT:
+                  case ElementType::SYMBOL:
+                  case ElementType::TEXT:
+                  case ElementType::INSTRUMENT_NAME:
+                  case ElementType::SLUR_SEGMENT:
+                  case ElementType::TIE_SEGMENT:
+                  case ElementType::STAFF_LINES:
+                  case ElementType::BAR_LINE:
+                  case ElementType::STEM_SLASH:
+                  case ElementType::LINE:
+                  case ElementType::BRACKET:
+                  case ElementType::ARPEGGIO:
+                  case ElementType::ACCIDENTAL:
+                  case ElementType::STEM:
+                  case ElementType::NOTE:
+                  case ElementType::CLEF:
+                  case ElementType::KEYSIG:
+                  case ElementType::TIMESIG:
+                  case ElementType::REST:
+                  case ElementType::BREATH:
+                  case ElementType::GLISSANDO:
+                  case ElementType::REPEAT_MEASURE:
+                  case ElementType::IMAGE:
+                  case ElementType::TIE:
+                  case ElementType::CHORDLINE:
+                  case ElementType::BEAM:
+                  case ElementType::HOOK:
+                  case ElementType::MARKER:
+                  case ElementType::JUMP:
+                  case ElementType::FINGERING:
+                  case ElementType::TUPLET:
+                  case ElementType::TEMPO_TEXT:
+                  case ElementType::STAFF_TEXT:
+                  case ElementType::SYSTEM_TEXT:
+                  case ElementType::REHEARSAL_MARK:
+                  case ElementType::INSTRUMENT_CHANGE:
+                  case ElementType::BEND:
+                  case ElementType::TREMOLOBAR:
+                  case ElementType::VOLTA:
+                  case ElementType::OTTAVA_SEGMENT:
+                  case ElementType::TRILL_SEGMENT:
+                  case ElementType::VIBRATO_SEGMENT:
+                  case ElementType::TEXTLINE_SEGMENT:
+                  case ElementType::VOLTA_SEGMENT:
+                  case ElementType::PEDAL_SEGMENT:
+                  case ElementType::LAYOUT_BREAK:
+                  case ElementType::SPACER:
+                  case ElementType::STAFF_STATE:
+                  case ElementType::LEDGER_LINE:
+                  case ElementType::NOTEHEAD:
+                  case ElementType::NOTEDOT:
+                  case ElementType::TREMOLO:
+                  case ElementType::MEASURE:
+                  case ElementType::SELECTION:
+                  case ElementType::LASSO:
+                  case ElementType::SHADOW_NOTE:
+                  case ElementType::RUBBERBAND:
+                  case ElementType::TAB_DURATION_SYMBOL:
+                  case ElementType::FSYMBOL:
+                  case ElementType::PAGE:
+                  case ElementType::OTTAVA:
+                  case ElementType::PEDAL:
+                  case ElementType::TRILL:
+                  case ElementType::TEXTLINE:
+                  case ElementType::NOTELINE:
+                  case ElementType::SEGMENT:
+                  case ElementType::SYSTEM:
+                  case ElementType::COMPOUND:
+                  case ElementType::CHORD:
+                  case ElementType::SLUR:
+                  case ElementType::ELEMENT:
+                  case ElementType::ELEMENT_LIST:
+                  case ElementType::STAFF_LIST:
+                  case ElementType::MEASURE_LIST:
+                  case ElementType::LAYOUT:
+                  case ElementType::HBOX:
+                  case ElementType::VBOX:
+                  case ElementType::TBOX:
+                  case ElementType::FBOX:
+                  case ElementType::ICON:
+                  case ElementType::OSSIA:
+                  case ElementType::BAGPIPE_EMBELLISHMENT:
                         continue;
 */
-                  case Element::Type::ARTICULATION:
+                  case ElementType::ARTICULATION:
                         // ignore articulations not attached to chords/rest
-                        if (e->parent()->type() == Element::Type::CHORD) {
-                              Chord* par = static_cast<Chord*>( (static_cast<Articulation*>(e))->parent() );
+                        if (e->parent()->isChord()) {
+                              Chord* par = toChord(e->parent());
                               seg = par->segment();
                               break;
                               }
-                        else if (e->parent()->type() == Element::Type::REST) {
-                              Rest* par = static_cast<Rest*>( (static_cast<Articulation*>(e))->parent() );
+                        else if (e->parent()->isRest()) {
+                              Rest* par = toRest(e->parent());
                               seg = par->segment();
                               break;
                               }
                         continue;
-                  case Element::Type::FIGURED_BASS:
-                        seg = (static_cast<FiguredBass*>(e))->segment();
+                  case ElementType::FIGURED_BASS:
+                        seg = toFiguredBass(e)->segment();
                         break;
-                  case Element::Type::HARMONY:
-                        // ignore chord sybols not attached to segment
-                        if (e->parent()->type() == Element::Type::SEGMENT) {
-                              seg = static_cast<Segment*>( (static_cast<Harmony*>(e))->parent() );
+                  case ElementType::HARMONY:
+                  case ElementType::FRET_DIAGRAM:
+                        // ignore chord symbols or fret diagrams not attached to segment
+                        if (e->parent()->isSegment()) {
+                              seg = toSegment(e->parent());
                               break;
                               }
                         continue;
-                  case Element::Type::LYRICS:
-                        seg = (static_cast<Lyrics*>(e))->segment();
+                  case ElementType::LYRICS:
+                        seg = toLyrics(e)->segment();
+                        break;
+                  case ElementType::DYNAMIC:
+                        seg = toDynamic(e)->segment();
+                        break;
+                  case ElementType::HAIRPIN_SEGMENT:
+                        e = toHairpinSegment(e)->hairpin();
+                        // fall through
+                  case ElementType::HAIRPIN:
+                        seg = toHairpin(e)->startSegment();
                         break;
                   default:
                         continue;
                   }
-            track = e->track();
+            int track = e->track();
             if (track < topTrack)
                   topTrack = track;
             if (track > bottomTrack)
@@ -867,7 +1014,7 @@ Enabling copying of more element types requires enabling pasting in Score::paste
                   }
             mapData.e = e;
             mapData.s = seg;
-            map.insert(std::pair<qint64,MAPDATA>( ((qint64)track << 32) + seg->tick(), mapData));
+            map.insert(std::pair<qint64,MapData>( ((qint64)track << 32) + seg->tick().ticks(), mapData));
             }
 
       xml.stag(QString("SymbolList version=\"" MSC_VERSION "\" fromtrack=\"%1\" totrack=\"%2\"")
@@ -877,20 +1024,20 @@ Enabling copying of more element types requires enabling pasting in Score::paste
       int   currTrack = -1;
       for (auto iter = map.cbegin(); iter != map.cend(); ++iter) {
             int   numSegs;
-            int   track = (int)(iter->first >> 32);
+            int   track = static_cast<int>(iter->first >> 32);
             if (currTrack != track) {
                   xml.tag("trackOffset", track - topTrack);
                   currTrack = track;
                   seg       = firstSeg;
                   }
-            xml.tag("tickOffset", (int)(iter->first & 0xFFFFFFFF) - firstTick);
+            xml.tag("tickOffset", static_cast<int>(iter->first & 0xFFFFFFFF) - firstTick.ticks());
             numSegs = 0;
             // with figured bass, we need to look for the proper segment
             // not only according to ChordRest elements, but also annotations
-            if (iter->second.e->type() == Element::Type::FIGURED_BASS) {
+            if (iter->second.e->type() == ElementType::FIGURED_BASS) {
                   bool done = false;
                   for ( ; seg; seg = seg->next1()) {
-                        if (seg->segmentType() == Segment::Type::ChordRest) {
+                        if (seg->isChordRestType()) {
                               // if no ChordRest in right track, look in anotations
                               if (seg->element(currTrack) == nullptr) {
                                     foreach (Element* el, seg->annotations()) {
@@ -900,7 +1047,7 @@ Enabling copying of more element types requires enabling pasting in Score::paste
                                                 break;
                                                 }
                                           // do annotations include any f.b.?
-                                          if (el->type() == Element::Type::FIGURED_BASS && el->track() == track) {
+                                          if (el->type() == ElementType::FIGURED_BASS && el->track() == track) {
                                                 numSegs++;  //yes: it counts as a step
                                                 break;
                                                 }
@@ -919,9 +1066,9 @@ Enabling copying of more element types requires enabling pasting in Score::paste
                   }
             else {
                   while (seg && iter->second.s != seg) {
-                              seg = seg->nextCR(currTrack);
-                              numSegs++;
-                              }
+                        seg = seg->nextCR(currTrack);
+                        numSegs++;
+                        }
                   }
             xml.tag("segDelta", numSegs);
             iter->second.e->write(xml);
@@ -936,14 +1083,14 @@ Enabling copying of more element types requires enabling pasting in Score::paste
 //   noteList
 //---------------------------------------------------------
 
-QList<Note*> Selection::noteList(int selTrack) const
+std::vector<Note*> Selection::noteList(int selTrack) const
       {
-      QList<Note*>nl;
+      std::vector<Note*>nl;
 
       if (_state == SelState::LIST) {
             foreach(Element* e, _el) {
-                  if (e->type() == Element::Type::NOTE)
-                        nl.append(static_cast<Note*>(e));
+                  if (e->isNote())
+                        nl.push_back(toNote(e));
                   }
             }
       else if (_state == SelState::RANGE) {
@@ -951,19 +1098,19 @@ QList<Note*> Selection::noteList(int selTrack) const
                   int startTrack = staffIdx * VOICES;
                   int endTrack   = startTrack + VOICES;
                   for (Segment* seg = _startSegment; seg && seg != _endSegment; seg = seg->next1()) {
-                        if (!(seg->segmentType() & (Segment::Type::ChordRest)))
+                        if (!(seg->segmentType() & (SegmentType::ChordRest)))
                               continue;
                         for (int track = startTrack; track < endTrack; ++track) {
                               if (!canSelectVoice(track))
                                   continue;
                               Element* e = seg->element(track);
-                              if (e == 0 || e->type() != Element::Type::CHORD
+                              if (e == 0 || e->type() != ElementType::CHORD
                                  || (selTrack != -1 && selTrack != track))
                                     continue;
-                              Chord* c = static_cast<Chord*>(e);
-                              nl.append(c->notes());
+                              Chord* c = toChord(e);
+                              nl.insert(nl.end(), c->notes().begin(), c->notes().end());
                               for (Chord* g : c->graceNotes()) {
-                                    nl.append(g->notes());
+                                    nl.insert(nl.end(), g->notes().begin(), g->notes().end());
                                     }
                               }
                         }
@@ -982,7 +1129,7 @@ static bool checkStart(Element* e)
       {
       if (e == 0 || !e->isChordRest())
             return false;
-      ChordRest* cr = static_cast<ChordRest*>(e);
+      ChordRest* cr = toChordRest(e);
       bool rv = false;
       if (cr->tuplet()) {
             // check that complete tuplet is selected, all the way up to top level
@@ -994,9 +1141,9 @@ static bool checkStart(Element* e)
                   tuplet = tuplet->tuplet();
                   }
             }
-      else if (cr->type() == Element::Type::CHORD) {
+      else if (cr->type() == ElementType::CHORD) {
             rv = false;
-            Chord* chord = static_cast<Chord*>(cr);
+            Chord* chord = toChord(cr);
             if (chord->tremolo() && chord->tremolo()->twoNotes())
                   rv = chord->tremolo()->chord2() == chord;
             }
@@ -1009,11 +1156,11 @@ static bool checkStart(Element* e)
 //     return true  if element is part of a tuplet, but not the end
 //---------------------------------------------------------
 
-static bool checkEnd(Element* e, int endTick)
+static bool checkEnd(Element* e, const Fraction& endTick)
       {
       if (e == 0 || !e->isChordRest())
             return false;
-      ChordRest* cr = static_cast<ChordRest*>(e);
+      ChordRest* cr = toChordRest(e);
       bool rv = false;
       if (cr->tuplet()) {
             // check that complete tuplet is selected, all the way up to top level
@@ -1025,13 +1172,13 @@ static bool checkEnd(Element* e, int endTick)
                   tuplet = tuplet->tuplet();
                   }
             // also check that the selection extends to the end of the top-level tuplet
-            tuplet = static_cast<Tuplet*>(e);
-            if (tuplet->elements().first()->tick() + tuplet->actualTicks() > endTick)
+            tuplet = toTuplet(e);
+            if (tuplet->elements().front()->tick() + tuplet->actualTicks() > endTick)
                   return true;
             }
-      else if (cr->type() == Element::Type::CHORD) {
+      else if (cr->type() == ElementType::CHORD) {
             rv = false;
-            Chord* chord = static_cast<Chord*>(cr);
+            Chord* chord = toChord(cr);
             if (chord->tremolo() && chord->tremolo()->twoNotes())
                   rv = chord->tremolo()->chord1() == chord;
             }
@@ -1041,7 +1188,7 @@ static bool checkEnd(Element* e, int endTick)
 //---------------------------------------------------------
 //   canCopy
 //    return false if range selection intersects a tuplet
-//    or a tremolo
+//    or a tremolo, or a local time signature
 //---------------------------------------------------------
 
 bool Selection::canCopy() const
@@ -1049,9 +1196,10 @@ bool Selection::canCopy() const
       if (_state != SelState::RANGE)
             return true;
 
-      int endTick = _endSegment ? _endSegment->tick() : score()->lastSegment()->tick();
+      Fraction endTick = _endSegment ? _endSegment->tick() : _score->lastSegment()->tick();
 
-      for (int staffIdx = _staffStart; staffIdx != _staffEnd; ++staffIdx)
+      for (int staffIdx = _staffStart; staffIdx != _staffEnd; ++staffIdx) {
+
             for (int voice = 0; voice < VOICES; ++voice) {
                   int track = staffIdx * VOICES + voice;
                   if (!canSelectVoice(track))
@@ -1076,6 +1224,14 @@ bool Selection::canCopy() const
                   if (checkEnd(endSegmentSelection->element(track), endTick))
                         return false;
                   }
+
+            // loop through measures on this staff checking for local time signatures
+            for (Measure* m = _startSegment->measure(); m && m->tick() < endTick; m = m->nextMeasure()) {
+                  if (_score->staff(staffIdx)->isLocalTimeSignature(m->tick()))
+                        return false;
+                  }
+
+            }
       return true;
       }
 
@@ -1090,7 +1246,7 @@ bool Selection::measureRange(Measure** m1, Measure** m2) const
             return false;
       *m1 = startSegment()->measure();
       Segment* s2 = endSegment();
-      *m2 = s2 ? s2->measure() : score()->lastMeasure();
+      *m2 = s2 ? s2->measure() : _score->lastMeasure();
       if (*m1 == *m2)
             return true;
       // if selection extends to last segment of a measure,
@@ -1162,13 +1318,13 @@ QList<Note*> Selection::uniqueNotes(int track) const
 
 void Selection::extendRangeSelection(ChordRest* cr)
       {
-            extendRangeSelection(cr->segment(),
-                                 cr->nextSegmentAfterCR(Segment::Type::ChordRest
-                                                             | Segment::Type::EndBarLine
-                                                             | Segment::Type::Clef),
-                                 cr->staffIdx(),
-                                 cr->tick(),
-                                 cr->tick());
+      extendRangeSelection(cr->segment(),
+         cr->nextSegmentAfterCR(SegmentType::ChordRest
+            | SegmentType::EndBarLine
+            | SegmentType::Clef),
+            cr->staffIdx(),
+            cr->tick(),
+            cr->tick());
       }
 
 //---------------------------------------------------------
@@ -1180,14 +1336,21 @@ void Selection::extendRangeSelection(ChordRest* cr)
 //    extending by a chord rest.
 //---------------------------------------------------------
 
-void Selection::extendRangeSelection(Segment* seg, Segment* segAfter, int staffIdx, int tick, int etick)
+void Selection::extendRangeSelection(Segment* seg, Segment* segAfter, int staffIdx, const Fraction& tick, const Fraction& etick)
       {
       bool activeIsFirst = false;
+      int activeStaff = _activeTrack / VOICES;
 
       if (staffIdx < _staffStart)
             _staffStart = staffIdx;
       else if (staffIdx >= _staffEnd)
             _staffEnd = staffIdx + 1;
+      else if (_staffEnd - _staffStart > 1) { // at least 2 staff selected
+            if (staffIdx == _staffStart + 1 && activeStaff == _staffStart) // going down
+                  _staffStart = staffIdx;
+            else if (staffIdx == _staffEnd - 2 && activeStaff == _staffEnd - 1) // going up
+                  _staffEnd = staffIdx + 1;
+            }
 
       if (tick < tickStart()) {
             _startSegment = seg;
@@ -1207,6 +1370,7 @@ void Selection::extendRangeSelection(Segment* seg, Segment* segAfter, int staffI
             }
       activeIsFirst ? _activeSegment = _startSegment : _activeSegment = _endSegment;
       _score->setSelectionChanged(true);
+      Q_ASSERT(!(_endSegment && !_startSegment));
       }
 
 //---------------------------------------------------------

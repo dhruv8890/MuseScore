@@ -1,9 +1,8 @@
 //=============================================================================
 //  MusE Score
 //  Linux Music Score Editor
-//  $Id: synthcontrol.h 2047 2009-08-26 18:33:38Z wschweer $
 //
-//  Copyright (C) 2002-2010 Werner Schweer and others
+//  Copyright (C) 2002-2016 Werner Schweer and others
 //
 //  This program is free software; you can redistribute it and/or modify
 //  it under the terms of the GNU General Public License version 2.
@@ -37,16 +36,20 @@ class SynthControl : public QWidget, Ui::SynthControl {
 
       Score* _score;
       EnablePlayForWidget* enablePlay;
+      bool _dirty    { false };
 
       virtual void closeEvent(QCloseEvent*);
       virtual void showEvent(QShowEvent*);
       virtual bool eventFilter(QObject*, QEvent*);
       virtual void keyPressEvent(QKeyEvent*) override;
       void updateGui();
+      void readSettings();
+      void updateExpressivePatches();
+      void updateMixer();
+      void setAllUserBankController(bool val);
 
    private slots:
       void gainChanged(double, int);
-      void metronomeGainChanged(double val, int);
       void masterTuningChanged(double);
       void changeMasterTuning();
       void effectAChanged(int);
@@ -55,13 +58,20 @@ class SynthControl : public QWidget, Ui::SynthControl {
       void saveButtonClicked();
       void storeButtonClicked();
       void recallButtonClicked();
+      void dynamicsMethodChanged(int);
+      void ccToUseChanged(int);
+      void switchExprButtonClicked();
+      void switchNonExprButtonClicked();
+      void resetExprButtonClicked();
       void setDirty();
 
    signals:
-      void gainChanged(float);
-      void metronomeGainChanged(float);
       void soundFontChanged();
       void closed(bool);
+
+   protected:
+      virtual void changeEvent(QEvent *event);
+      void retranslate()  { retranslateUi(this); }
 
    public slots:
       void setGain(float);
@@ -70,7 +80,7 @@ class SynthControl : public QWidget, Ui::SynthControl {
       SynthControl(QWidget* parent);
       void setMeter(float, float, float, float);
       void stop();
-      void setScore(Score* s) { _score = s; }
+      void setScore(Score* s);
       void writeSettings();
       };
 }

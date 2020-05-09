@@ -19,18 +19,18 @@
 */
 
 #include "mscore.h"
-#include "velo.h"
+#include "changeMap.h"
 #include "pitch.h"
 #include "cleflist.h"
 #include "keylist.h"
-#include "stafftype.h"
+#include "stafftypelist.h"
 #include "groups.h"
 #include "scoreElement.h"
 
 namespace Ms {
 
 class InstrumentTemplate;
-class Xml;
+class XmlWriter;
 class Part;
 class Score;
 class KeyList;
@@ -41,42 +41,10 @@ class Segment;
 class Clef;
 class TimeSig;
 class Ottava;
+class BracketItem;
+class Note;
 
 enum class Key;
-
-//---------------------------------------------------------
-//   LinkedStaves
-//---------------------------------------------------------
-
-class LinkedStaves {
-      QList<Staff*> _staves;
-
-   public:
-      LinkedStaves() {}
-      QList<Staff*>& staves()             { return _staves; }
-      const QList<Staff*>& staves() const { return _staves; }
-      void add(Staff*);
-      void remove(Staff*);
-      bool isEmpty() const { return _staves.isEmpty(); }
-      };
-
-//---------------------------------------------------------
-//   BracketItem
-//---------------------------------------------------------
-
-struct BracketItem {
-      BracketType _bracket;
-      int _bracketSpan;
-
-      BracketItem() {
-            _bracket = BracketType::NO_BRACKET;
-            _bracketSpan = 0;
-            }
-      BracketItem(BracketType a, int b) {
-            _bracket = a;
-            _bracketSpan = b;
-            }
-      };
 
 //---------------------------------------------------------
 //   SwingParameters
@@ -92,9 +60,11 @@ struct SwingParameters {
 ///    Global staff data not directly related to drawing.
 //---------------------------------------------------------
 
-class Staff : public QObject, public ScoreElement {
-      Q_OBJECT
+class Staff final : public ScoreElement {
+   public:
+      enum class HideMode { AUTO, ALWAYS, NEVER, INSTRUMENT };
 
+   private:
       Part* _part       { 0 };
 
       ClefList clefs;
@@ -103,150 +73,192 @@ class Staff : public QObject, public ScoreElement {
       KeyList _keys;
       std::map<int,TimeSig*> timesigs;
 
-      QList <BracketItem> _brackets;
-      int _barLineSpan   { 1     };    ///< 0 - no bar line, 1 - span this staff, ...
-      int _barLineFrom   { 0     };    ///< line of start staff to draw the barline from (0 = staff top line, ...)
-      int _barLineTo;                  ///< line of end staff to draw the bar line to (0= staff top line, ...)
-      bool _small        { false };
-      bool _invisible    { false };
-      bool _neverHide    { false };    ///< always show this staff, even if empty and hideEmptyStaves is true
-      bool _showIfEmpty  { false };    ///< show this staff if system is empty and hideEmptyStaves is true
-      bool _hideSystemBarLine  { false }; // no system barline if not preceeded by staff with barline
+      QList <BracketItem*> _brackets;
+      int  _barLineSpan        { false };    ///< true - span barline to next staff
+      int _barLineFrom         { 0     };    ///< line of start staff to draw the barline from (0 = staff top line, ...)
+      int _barLineTo           { 0     };    ///< line of end staff to draw the bar line to (0= staff bottom line, ...)
 
-      QColor _color      { MScore::defaultColor };
-      qreal _userDist    { 0.0   };        ///< user edited extra distance
-      qreal _userMag     { 1.0   };             // allowed 0.1 - 10.0
+      bool _invisible          { false };
+      bool _cutaway            { false };
+      bool _showIfEmpty        { false };       ///< show this staff if system is empty and hideEmptyStaves is true
+      bool _hideSystemBarLine  { false };       // no system barline if not preceded by staff with barline
+      HideMode _hideWhenEmpty  { HideMode::AUTO };    // hide empty staves
 
-      StaffType _staffType;
-      LinkedStaves* _linkedStaves { nullptr };
+      QColor _color            { MScore::defaultColor };
+      qreal _userDist          { 0.0   };       ///< user edited extra distance
+
+      StaffTypeList _staffTypeList;
+
       QMap<int,int> _channelList[VOICES];
       QMap<int,SwingParameters> _swingList;
+      QMap<int,int> _capoList;
+      bool _playbackVoice[VOICES] { true, true, true, true };
 
-      VeloList _velocities;         ///< cached value
+      ChangeMap _velocities;         ///< cached value
       PitchList _pitchOffsets;      ///< cached value
 
-      void scaleChanged(double oldValue, double newValue);
+      void fillBrackets(int);
+      void cleanBrackets();
+
+      qreal mag(const StaffType*) const;
 
    public:
-      Staff(Score* = 0);
-      ~Staff();
+      Staff(Score* score = 0);
       void init(const InstrumentTemplate*, const StaffType *staffType, int);
       void initFromStaffType(const StaffType* staffType);
       void init(const Staff*);
+
+      ElementType type() const override { return ElementType::STAFF; }
 
       bool isTop() const;
       QString partName() const;
       int rstaff() const;
       int idx() const;
       void read(XmlReader&);
-      void read114(XmlReader&);
-      void write(Xml& xml) const;
+      bool readProperties(XmlReader&);
+      void write(XmlWriter& xml) const;
       Part* part() const             { return _part;        }
       void setPart(Part* p)          { _part = p;           }
 
-      BracketType bracket(int idx) const;
+      BracketType bracketType(int idx) const;
       int bracketSpan(int idx) const;
-      void setBracket(int idx, BracketType val);
+      void setBracketType(int idx, BracketType val);
       void setBracketSpan(int idx, int val);
-      int bracketLevels() const      { return _brackets.size(); }
-      void addBracket(BracketItem);
-      QList <BracketItem> brackets() const { return _brackets; }
+      void swapBracket(int oldIdx, int newIdx);
+      void changeBracketColumn(int oldColumn, int newColumn);
+      void addBracket(BracketItem*);
+      const QList<BracketItem*>& brackets() const { return _brackets; }
+      QList<BracketItem*>& brackets()             { return _brackets; }
       void cleanupBrackets();
+      int bracketLevels() const;
 
-      ClefTypeList clefType(int tick) const;
+      ClefList& clefList()                           { return clefs;  }
+      ClefTypeList clefType(const Fraction&) const;
       ClefTypeList defaultClefType() const           { return _defaultClefType; }
       void setDefaultClefType(const ClefTypeList& l) { _defaultClefType = l; }
-      ClefType clef(int tick) const;
+      ClefType clef(const Fraction&) const;
+      Fraction nextClefTick(const Fraction&) const;
+      Fraction currentClefTick(const Fraction&) const;
 
       void setClef(Clef*);
-      void removeClef(Clef*);
+      void removeClef(const Clef*);
 
       void addTimeSig(TimeSig*);
       void removeTimeSig(TimeSig*);
       void clearTimeSig();
-      Fraction timeStretch(int tick) const;
-      TimeSig* timeSig(int tick) const;
-      const Groups& group(int tick) const;
+      Fraction timeStretch(const Fraction&) const;
+      TimeSig* timeSig(const Fraction&) const;
+      TimeSig* nextTimeSig(const Fraction&) const;
+      Fraction currentTimeSigTick(const Fraction&) const;
 
-      KeyList* keyList()               { return &_keys;                  }
-      Key key(int tick) const          { return keySigEvent(tick).key(); }
-      KeySigEvent keySigEvent(int tick) const;
-      int nextKeyTick(int tick) const;
-      int currentKeyTick(int tick) const;
-      KeySigEvent prevKey(int tick) const;
-      void setKey(int tick, KeySigEvent);
-      void removeKey(int tick);
+      bool isLocalTimeSignature(const Fraction& tick) { return timeStretch(tick) != Fraction(1, 1); }
+
+      const Groups& group(const Fraction&) const;
+
+      KeyList* keyList()                      { return &_keys;                  }
+      Key key(const Fraction& tick) const     { return keySigEvent(tick).key(); }
+      KeySigEvent keySigEvent(const Fraction&) const;
+      Fraction nextKeyTick(const Fraction&) const;
+      Fraction currentKeyTick(const Fraction&) const;
+      KeySigEvent prevKey(const Fraction&) const;
+      void setKey(const Fraction&, KeySigEvent);
+      void removeKey(const Fraction&);
 
       bool show() const;
-      bool slashStyle() const;
-      bool small() const             { return _small;       }
-      void setSmall(bool val)        { _small = val;        }
+      bool stemless(const Fraction&) const;
       bool invisible() const         { return _invisible;   }
       void setInvisible(bool val)    { _invisible = val;    }
-      bool neverHide() const         { return _neverHide;   }
-      void setNeverHide(bool val)    { _neverHide = val;    }
+      bool cutaway() const           { return _cutaway;     }
+      void setCutaway(bool val)      { _cutaway = val;      }
       bool showIfEmpty() const       { return _showIfEmpty; }
       void setShowIfEmpty(bool val)  { _showIfEmpty = val;  }
 
-      void setHideSystemBarLine(bool val) { _hideSystemBarLine = val;  }
       bool hideSystemBarLine() const      { return _hideSystemBarLine; }
+      void setHideSystemBarLine(bool val) { _hideSystemBarLine = val;  }
+      HideMode hideWhenEmpty() const      { return _hideWhenEmpty;     }
+      void setHideWhenEmpty(HideMode v)   { _hideWhenEmpty = v;        }
 
-      void setSlashStyle(bool val);
-      int lines() const;
-      void setLines(int);
-      qreal lineDistance() const;
       int barLineSpan() const        { return _barLineSpan; }
       int barLineFrom() const        { return _barLineFrom; }
       int barLineTo() const          { return _barLineTo;   }
       void setBarLineSpan(int val)   { _barLineSpan = val;  }
       void setBarLineFrom(int val)   { _barLineFrom = val;  }
-      void setBarLineTo(int val);
-      qreal mag() const;
+      void setBarLineTo(int val)     { _barLineTo = val;    }
       qreal height() const;
-      qreal spatium() const;
-      int channel(int tick, int voice) const;
-      QMap<int,int>* channelList(int voice) { return  &_channelList[voice]; }
-      SwingParameters swing(int tick)  const;
-      QMap<int,SwingParameters>* swingList() { return &_swingList; }
 
-      const StaffType* staffType() const { return &_staffType;      }
-      StaffType* staffType()             { return &_staffType;      }
+      int channel(const Fraction&, int voice) const;
 
-      void setStaffType(const StaffType* st);
-      StaffGroup staffGroup() const    { return _staffType.group(); }
-      bool isPitchedStaff() const      { return staffGroup() == StaffGroup::STANDARD; }
-      bool isTabStaff() const          { return staffGroup() == StaffGroup::TAB; }
-      bool isDrumStaff() const         { return staffGroup() == StaffGroup::PERCUSSION; }
+      QList<Note*> getNotes() const;
+      void addChord(QList<Note*>& list, Chord* chord, int voice) const;
 
-      VeloList& velocities()           { return _velocities;     }
-      int pitchOffset(int tick)        { return _pitchOffsets.pitchOffset(tick);   }
+      void clearChannelList(int voice)                               { _channelList[voice].clear(); }
+      void insertIntoChannelList(int voice, const Fraction& tick, int channelId) { _channelList[voice].insert(tick.ticks(), channelId); }
+
+      SwingParameters swing(const Fraction&)  const;
+      void clearSwingList()                                  { _swingList.clear(); }
+      void insertIntoSwingList(const Fraction& tick, SwingParameters sp) { _swingList.insert(tick.ticks(), sp); }
+
+      int capo(const Fraction&) const;
+      void clearCapoList()                             { _capoList.clear(); }
+      void insertIntoCapoList(const Fraction& tick, int fretId)    { _capoList.insert(tick.ticks(), fretId); }
+
+      //==== staff type helper function
+      const StaffType* staffType(const Fraction&) const;
+      const StaffType* constStaffType(const Fraction&) const;
+      const StaffType* staffTypeForElement(const Element*) const;
+      StaffType* staffType(const Fraction&);
+      StaffType* setStaffType(const Fraction&, const StaffType&);
+      void removeStaffType(const Fraction&);
+      void staffTypeListChanged(const Fraction&);
+
+      bool isPitchedStaff(const Fraction&) const;
+      bool isTabStaff(const Fraction&) const;
+      bool isDrumStaff(const Fraction&) const;
+
+      int lines(const Fraction&) const;
+      void setLines(const Fraction&, int lines);
+      qreal lineDistance(const Fraction&) const;
+
+      void setSlashStyle(const Fraction&, bool val);
+      int middleLine(const Fraction&) const;
+      int bottomLine(const Fraction&) const;
+
+      qreal mag(const Fraction&) const;
+      qreal mag(const Element*) const;
+      qreal spatium(const Fraction&) const;
+      qreal spatium(const Element*) const;
+      //===========
+
+      ChangeMap& velocities()           { return _velocities;     }
+      PitchList& pitchOffsets()        { return _pitchOffsets;   }
+
+      int pitchOffset(const Fraction& tick) { return _pitchOffsets.pitchOffset(tick.ticks());   }
       void updateOttava();
 
-      LinkedStaves* linkedStaves() const    { return _linkedStaves; }
-      void setLinkedStaves(LinkedStaves* l) { _linkedStaves = l;    }
       QList<Staff*> staffList() const;
-      void linkTo(Staff* staff);
-      bool isLinked(Staff* staff);
-      void unlink(Staff* staff);
       bool primaryStaff() const;
 
       qreal userDist() const        { return _userDist;  }
       void setUserDist(qreal val)   { _userDist = val;   }
-      qreal userMag() const         { return _userMag;   }
-      void setUserMag(qreal m)      { _userMag = m;      }
 
       void spatiumChanged(qreal /*oldValue*/, qreal /*newValue*/);
+      void localSpatiumChanged(double oldVal, double newVal, Fraction tick);
       bool genKeySig();
-      bool showLedgerLines();
+      bool showLedgerLines(const Fraction&) const;
 
       QColor color() const                { return _color; }
       void setColor(const QColor& val)    { _color = val;    }
       void undoSetColor(const QColor& val);
-      void insertTime(int tick, int len);
+      void insertTime(const Fraction&, const Fraction& len);
 
-      virtual QVariant getProperty(P_ID) const override;
-      virtual bool setProperty(P_ID, const QVariant&) override;
-      virtual QVariant propertyDefault(P_ID) const override;
+      QVariant getProperty(Pid) const override;
+      bool setProperty(Pid, const QVariant&) override;
+      QVariant propertyDefault(Pid) const override;
+
+      BracketType innerBracket() const;
+
+      bool playbackVoice(int voice) const        { return _playbackVoice[voice]; }
+      void setPlaybackVoice(int voice, bool val) { _playbackVoice[voice] = val; }
 
 #ifndef NDEBUG
       void dumpClefs(const char* title) const;
@@ -257,6 +269,9 @@ class Staff : public QObject, public ScoreElement {
       void dumpKeys(const char*) const {}
       void dumpTimeSigs(const char*) const {}
 #endif
+
+      void triggerLayout();
+      void triggerLayout(const Fraction& tick);
       };
 
 }     // namespace Ms

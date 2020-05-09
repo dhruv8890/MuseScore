@@ -1,6 +1,7 @@
-#!/bin/bash
+#!/bin/sh
 
-cp ../../../build.debug/mtest/libmscore/selectionfilter/selectionfilter6-base.xml selectionfilter6-base-ref.xml
-cp ../../../build.debug/mtest/libmscore/selectionfilter/selectionfilter8-base.xml selectionfilter8-base-ref.xml
-cp ../../../build.debug/mtest/libmscore/selectionfilter/selectionfilter9-base.xml selectionfilter9-base-ref.xml
+for f in ../../../build.debug/mtest/libmscore/selectionfilter/selectionfilter*.xml
+do
+      cp "$f" $(basename "$f" .xml)-ref.xml
+done
 

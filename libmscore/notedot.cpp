@@ -15,6 +15,8 @@
 #include "staff.h"
 #include "sym.h"
 #include "xml.h"
+#include "chord.h"
+#include "rest.h"
 
 namespace Ms {
 
@@ -29,17 +31,6 @@ NoteDot::NoteDot(Score* s)
       }
 
 //---------------------------------------------------------
-//   layout
-//    height() and width() should return sensible
-//    values when calling this method
-//---------------------------------------------------------
-
-void NoteDot::layout()
-      {
-      setbbox(symBbox(SymId::augmentationDot));
-      }
-
-//---------------------------------------------------------
 //   NoteDot::draw
 //---------------------------------------------------------
 
@@ -47,10 +38,25 @@ void NoteDot::draw(QPainter* p) const
       {
       if (note() && note()->dotsHidden())     // don't draw dot if note is hidden
             return;
-      if (!staff()->isTabStaff() || staff()->staffType()->stemThrough()) {
+      Note* n = note();
+      Fraction tick = n ? n->chord()->tick() : rest()->tick();
+      // always draw dot for non-tab
+      // for tab, draw if on a note and stems through staff or on a rest and rests shown
+      if (!staff()->isTabStaff(tick)
+          || (n && staff()->staffType(tick)->stemThrough())
+          || (!n && staff()->staffType(tick)->showRests())) {
             p->setPen(curColor());
             drawSymbol(SymId::augmentationDot, p);
             }
+      }
+
+//---------------------------------------------------------
+//   layout
+//---------------------------------------------------------
+
+void NoteDot::layout()
+      {
+      setbbox(symBbox(SymId::augmentationDot));
       }
 
 //---------------------------------------------------------
@@ -75,7 +81,7 @@ void NoteDot::read(XmlReader& e)
 
 qreal NoteDot::mag() const
       {
-      return parent()->mag() * score()->styleD(StyleIdx::dotMag);
+      return parent()->mag() * score()->styleD(Sid::dotMag);
       }
 }
 

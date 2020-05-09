@@ -14,13 +14,14 @@
 #define __TUPLET_H__
 
 #include "duration.h"
-
-class QPainter;
+#include "property.h"
 
 namespace Ms {
 
 class Text;
 class Spanner;
+enum class TupletNumberType  : char;
+enum class TupletBracketType : char;
 
 //------------------------------------------------------------------------
 //   @@ Tuplet
@@ -29,30 +30,24 @@ class Spanner;
 //!       _actualNotes = 3
 //!       _normalNotes = 2     (3 notes played in the time of 2/8)
 //!
-//!    The tuplet has a len of _baseLen * _normalNotes.
+//!    The tuplet has a  len of _baseLen * _normalNotes.
 //!    A tuplet note has len of _baseLen * _normalNotes / _actualNotes.
 //------------------------------------------------------------------------
 
-class Tuplet : public DurationElement {
-      Q_OBJECT
+class Tuplet final : public DurationElement {
+      std::vector<DurationElement*> _elements;
+      Direction _direction;
+      TupletNumberType _numberType;
+      TupletBracketType _bracketType;
+      Spatium _bracketWidth;
 
-      int _tick;
-
-   public:
-      enum class NumberType : char { SHOW_NUMBER, SHOW_RELATION, NO_TEXT };
-      enum class BracketType : char { AUTO_BRACKET, SHOW_BRACKET, SHOW_NO_BRACKET };
-
-   private:
-      QList<DurationElement*> _elements;
-      NumberType _numberType;
-      BracketType _bracketType;
       bool _hasBracket;
-
       Fraction _ratio;
       TDuration _baseLen;      // 1/8 for a triplet of 1/8
 
-      MScore::Direction _direction;
       bool _isUp;
+
+      Fraction _tick;
 
       QPointF p1, p2;
       QPointF _p1, _p2;       // user offset
@@ -62,68 +57,92 @@ class Tuplet : public DurationElement {
       QPointF bracketL[4];
       QPointF bracketR[3];
 
+      Fraction addMissingElement(const Fraction& startTick, const Fraction& endTick);
+
    public:
       Tuplet(Score*);
       Tuplet(const Tuplet&);
       ~Tuplet();
-      virtual Tuplet* clone() const      { return new Tuplet(*this); }
-      virtual Element::Type type() const { return Element::Type::TUPLET; }
-      virtual void setTrack(int val);
 
-      virtual void add(Element*);
-      virtual void remove(Element*);
+      Tuplet* clone() const override    { return new Tuplet(*this);   }
+      ElementType type() const override { return ElementType::TUPLET; }
+      void setTrack(int val) override;
 
-      virtual bool isEditable() const;
-      virtual void editDrag(const EditData&);
-      virtual void updateGrips(Grip*, QVector<QRectF>&) const override;
-      virtual int grips() const override { return 2; }
+      void add(Element*) override;
+      void remove(Element*) override;
 
-      virtual void setSelected(bool f);
+      Text* number() const    { return _number; }
+      void setNumber(Text* t) { _number = t; }
+      void resetNumberProperty();
 
-      virtual Measure* measure() const { return (Measure*)parent(); }
+      bool isEditable() const override;
+      void startEditDrag(EditData&) override;
+      void editDrag(EditData&) override;
 
-      NumberType numberType() const        { return _numberType;       }
-      BracketType bracketType() const      { return _bracketType;      }
-      void setNumberType(NumberType val)   { _numberType = val;        }
-      void setBracketType(BracketType val) { _bracketType = val;       }
-      bool hasBracket() const              { return _hasBracket;       }
+      void setSelected(bool f) override;
 
-      Fraction ratio() const           { return _ratio;         }
-      void setRatio(const Fraction& r) { _ratio = r;            }
+      Measure* measure() const override  { return toMeasure(parent()); }
 
-      const QList<DurationElement*>& elements() const { return _elements; }
-      void clear()                                    { _elements.clear(); }
+      TupletNumberType numberType() const        { return _numberType;       }
+      TupletBracketType bracketType() const      { return _bracketType;      }
+      void setNumberType(TupletNumberType val)   { _numberType = val;        }
+      void setBracketType(TupletBracketType val) { _bracketType = val;       }
+      bool hasBracket() const                    { return _hasBracket;       }
+      void setHasBracket(bool b)                 { _hasBracket = b;          }
+      Spatium bracketWidth() const               { return _bracketWidth;     }
+      void setBracketWidth(Spatium s)            { _bracketWidth = s;        }
 
-      virtual void layout();
-      virtual void scanElements(void* data, void (*func)(void*, Element*), bool all=true);
-      Text* number() const { return _number; }
+      Fraction ratio() const                     { return _ratio;         }
+      void setRatio(const Fraction& r)           { _ratio = r;            }
 
-      void read(XmlReader&);
-      void write(Xml&) const;
+      const std::vector<DurationElement*>& elements() const { return _elements; }
+      void clear()                                          { _elements.clear(); }
+      bool contains(const DurationElement* el) const { return std::find(_elements.begin(), _elements.end(), el) != _elements.end(); }
 
-      virtual void reset();
+      void layout() override;
+      void scanElements(void* data, void (*func)(void*, Element*), bool all=true) override;
 
-      virtual void draw(QPainter*) const;
+      void read(XmlReader&) override;
+      void write(XmlWriter&) const override;
+      bool readProperties(XmlReader&) override;
+
+      void reset() override;
+
+      void draw(QPainter*) const override;
       int id() const                       { return _id;          }
       void setId(int i) const              { _id = i;             }
 
       TDuration baseLen() const            { return _baseLen;     }
       void setBaseLen(const TDuration& d)  { _baseLen = d;        }
 
-      virtual void dump() const;
+      void dump() const override;
 
-      void setDirection(MScore::Direction d)       { _direction = d; }
-      MScore::Direction direction() const          { return _direction; }
-      bool isUp() const                    { return _isUp; }
-      virtual int tick() const             { return _tick; }
-      void setTick(int val)                { _tick = val; }
-      void sortElements();
+      void setDirection(Direction d)          { _direction = d; }
+      Direction direction() const             { return _direction; }
+      bool isUp() const                       { return _isUp; }
+      Fraction tick() const override  { return _tick; }
+      Fraction rtick() const override;
+      void setTick(const Fraction& v)         { _tick = v; }
       Fraction elementsDuration();
+      void sortElements();
+      bool cross() const;
 
-      virtual void setVisible(bool f);
-      QVariant getProperty(P_ID propertyId) const;
-      bool setProperty(P_ID propertyId, const QVariant& v);
-      QVariant propertyDefault(P_ID id) const;
+      void setVisible(bool f) override;
+
+      QVariant getProperty(Pid propertyId) const override;
+      bool setProperty(Pid propertyId, const QVariant& v) override;
+      QVariant propertyDefault(Pid id) const override;
+
+      Shape shape() const override;
+
+      Element::EditBehavior normalModeEditBehavior() const override { return Element::EditBehavior::Edit; }
+      int gripsCount() const override { return 2; }
+      Grip initialEditModeGrip() const override { return Grip::END; }
+      Grip defaultGrip() const override { return Grip::START; }
+      std::vector<QPointF> gripsPositions(const EditData&) const override;
+
+      void sanitizeTuplet();
+      void addMissingElements();
       };
 
 

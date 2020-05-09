@@ -23,21 +23,19 @@ namespace Ms {
 ///    used for grace notes of type acciaccatura
 //---------------------------------------------------------
 
-class StemSlash : public Element {
-      Q_OBJECT
-
+class StemSlash final : public Element {
       QLineF line;
 
    public:
       StemSlash(Score* s = 0) : Element(s)   {}
 
-      virtual qreal mag() const          { return parent()->mag(); }
+      qreal mag() const override         { return parent()->mag(); }
       void setLine(const QLineF& l);
 
-      virtual StemSlash* clone() const   { return new StemSlash(*this); }
-      virtual Element::Type type() const { return Element::Type::STEM_SLASH; }
-      virtual void draw(QPainter*) const;
-      virtual void layout();
+      StemSlash* clone() const override  { return new StemSlash(*this); }
+      ElementType type() const override  { return ElementType::STEM_SLASH; }
+      void draw(QPainter*) const override;
+      void layout() override;
       Chord* chord() const               { return (Chord*)parent(); }
       };
 

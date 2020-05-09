@@ -1,7 +1,6 @@
 //=============================================================================
 //  MuseScore
 //  Linux Music Score Editor
-//  $Id:$
 //
 //  Copyright (C) 20011 Werner Schweer and others
 //
@@ -36,11 +35,10 @@ namespace Ms {
 MediaDialog::MediaDialog(QWidget* /*parent*/)
    : QDialog()
       {
+      setObjectName("MediaDialog");
       setupUi(this);
       setWindowFlags(this->windowFlags() & ~Qt::WindowContextHelpButtonHint);
-      setWindowTitle(tr("MuseScore: Additional Media"));
-      scanFileButton->setIcon(*icons[int(Icons::fileOpen_ICON)]);
-      audioFileButton->setIcon(*icons[int(Icons::fileOpen_ICON)]);
+      setWindowTitle(tr("Additional Media"));
 
       connect(addScan,         SIGNAL(clicked()), SLOT(addScanPressed()));
       connect(removeScan,      SIGNAL(clicked()), SLOT(removeScanPressed()));
@@ -48,6 +46,11 @@ MediaDialog::MediaDialog(QWidget* /*parent*/)
       connect(removeAudio,     SIGNAL(clicked()), SLOT(removeAudioPressed()));
       connect(scanFileButton,  SIGNAL(clicked()), SLOT(scanFileButtonPressed()));
       connect(audioFileButton, SIGNAL(clicked()), SLOT(audioFileButtonPressed()));
+
+      scanFileButton->setIcon(*icons[int(Icons::fileOpen_ICON)]);
+      audioFileButton->setIcon(*icons[int(Icons::fileOpen_ICON)]);
+
+      MuseScore::restoreGeometry(this);
       }
 
 //---------------------------------------------------------
@@ -56,8 +59,8 @@ MediaDialog::MediaDialog(QWidget* /*parent*/)
 
 void MediaDialog::setScore(Score* s)
       {
-      score = s;
-      Omr* omr = score->omr();
+      score = s->masterScore();
+      Omr* omr = score->masterScore()->omr();
       if (omr) {
             scanFile->setText(omr->path());
             addScan->setEnabled(false);
@@ -92,7 +95,7 @@ void MediaDialog::setScore(Score* s)
 void MediaDialog::addScanPressed()
       {
       QString path = scanFile->text();
-      if (score->omr() || path.isEmpty())
+      if (score->masterScore()->omr() || path.isEmpty())
             return;
       Omr* omr = new Omr(path, score);
       if (!omr->readPdf()) {
@@ -100,7 +103,7 @@ void MediaDialog::addScanPressed()
             delete omr;
             return;
             }
-      score->setOmr(omr);
+      score->masterScore()->setOmr(omr);
       mscore->currentScoreView()->showOmr(true);
       }
 
@@ -151,7 +154,7 @@ void MediaDialog::addAudioPressed()
 #endif
 
       QFileInfo fi(path);
-      QFile syncFile(fi.absolutePath() + "/" + fi.baseName() + ".txt");
+      QFile syncFile(fi.absolutePath() + "/" + fi.completeBaseName() + ".txt");
 
       TempoMap* tmo = score->tempomap();
 
@@ -198,7 +201,7 @@ void MediaDialog::addAudioPressed()
             }
       score->setTempomap(tmn);
       syncFile.close();
-      QMessageBox::information(0, "Done", "Done");
+      QMessageBox::information(0, tr("Done"), tr("Done"));
       }
 
 //---------------------------------------------------------
@@ -235,5 +238,16 @@ void MediaDialog::audioFileButtonPressed()
       if (!s.isNull())
             audioFile->setText(s);
       }
+
+//---------------------------------------------------------
+//   hideEvent
+//---------------------------------------------------------
+
+void MediaDialog::hideEvent(QHideEvent* event)
+      {
+      MuseScore::saveGeometry(this);
+      QWidget::hideEvent(event);
+      }
+
 }
 

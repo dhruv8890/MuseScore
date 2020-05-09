@@ -11,7 +11,7 @@
    </rect>
   </property>
   <property name="windowTitle">
-   <string/>
+   <string notr="true"/>
   </property>
   <layout class="QVBoxLayout">
    <property name="spacing">
@@ -32,7 +32,7 @@
    <item>
     <widget class="QGroupBox" name="groupBox">
      <property name="title">
-      <string notr="true" comment="do not translate">Spanner</string>
+      <string notr="true">Spanner</string>
      </property>
      <property name="flat">
       <bool>false</bool>
@@ -80,7 +80,17 @@
          </widget>
         </item>
         <item>
-         <widget class="QSpinBox" name="tick">
+         <widget class="QSpinBox" name="tickZ">
+          <property name="minimum">
+           <number>-1000</number>
+          </property>
+          <property name="maximum">
+           <number>999999</number>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QSpinBox" name="tickN">
           <property name="minimum">
            <number>-1000</number>
           </property>

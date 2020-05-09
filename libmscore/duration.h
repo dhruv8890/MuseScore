@@ -27,45 +27,44 @@ class Spanner;
 //   @@ DurationElement
 ///    Virtual base class for Chord, Rest and Tuplet.
 //
-//   @P duration  int  duration in ticks
+//   @P duration       Fraction  duration (as written)
+//   @P globalDuration Fraction  played duration
 //---------------------------------------------------------
 
 class DurationElement : public Element {
       Fraction _duration;
       Tuplet* _tuplet;
 
-#ifdef SCRIPT_INTERFACE
-      Q_OBJECT
-      Q_PROPERTY(FractionWrapper* duration READ durationW WRITE setDurationW)
-
-      void setDurationW(FractionWrapper* f)  { _duration = f->fraction(); }
-      FractionWrapper* durationW() const     { return new FractionWrapper(_duration); }
-#endif
+// #ifdef SCRIPT_INTERFACE
+//       void setDurationW(FractionWrapper* f)  { _duration = f->fraction(); }
+//       FractionWrapper* durationW() const     { return new FractionWrapper(_duration); }
+//       FractionWrapper* globalDurW() const    { return new FractionWrapper(globalDuration()); }
+// #endif
 
    public:
-      DurationElement(Score* s);
+      DurationElement(Score* = 0, ElementFlags = ElementFlag::MOVABLE | ElementFlag::ON_STAFF);
       DurationElement(const DurationElement& e);
       ~DurationElement();
 
       virtual Measure* measure() const    { return (Measure*)(parent()); }
 
-      virtual bool readProperties(XmlReader& e);
-      virtual void writeProperties(Xml& xml) const;
-      void writeTuplet(Xml& xml);
+      void readAddTuplet(Tuplet* t);
+      void writeTupletStart(XmlWriter& xml) const;
+      void writeTupletEnd(XmlWriter& xml) const;
 
       void setTuplet(Tuplet* t)           { _tuplet = t;      }
       Tuplet* tuplet() const              { return _tuplet;   }
+      Tuplet* topTuplet() const;
       virtual Beam* beam() const          { return 0;         }
-      virtual int tick() const = 0;
-      int actualTicks() const;
-      Fraction actualFraction() const;
 
-      virtual Fraction duration() const   { return _duration; }
-      Fraction globalDuration() const;
-      void setDuration(const Fraction& f) { _duration = f;    }
+      Fraction actualTicks() const;
 
-      virtual QVariant getProperty(P_ID propertyId) const override;
-      virtual bool setProperty(P_ID propertyId, const QVariant&) override;
+      virtual Fraction ticks() const { return _duration; }
+      Fraction globalTicks() const;
+      void setTicks(const Fraction& f) { _duration = f;    }
+
+      virtual QVariant getProperty(Pid propertyId) const override;
+      virtual bool setProperty(Pid propertyId, const QVariant&) override;
       };
 
 

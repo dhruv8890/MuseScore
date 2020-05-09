@@ -23,6 +23,7 @@
 #include "stringdata.h"
 #include "stafftype.h"
 #include "sym.h"
+#include "chordrest.h"
 
 namespace Ms {
 
@@ -33,8 +34,10 @@ namespace Ms {
 Part::Part(Score* s)
    : ScoreElement(s)
       {
+      _color = DEFAULT_COLOR;
       _show  = true;
       _instruments.setInstrument(new Instrument, -1);   // default instrument
+      _preferSharpFlat = PreferSharpFlat::DEFAULT;
       }
 
 //---------------------------------------------------------
@@ -57,34 +60,84 @@ Staff* Part::staff(int idx) const
       }
 
 //---------------------------------------------------------
+//   Part::masterPart
+//---------------------------------------------------------
+
+const Part* Part::masterPart() const
+      {
+      if (score()->isMaster())
+            return this;
+      if (_staves.empty())
+            return this;
+
+      Staff* st = _staves[0];
+      LinkedElements* links = st->links();
+      if (!links)
+            return this;
+
+      for (ScoreElement* le : *links) {
+            if (le->isStaff() && toStaff(le)->score()->isMaster()) {
+                  if (Part* p = toStaff(le)->part())
+                        return p;
+                  }
+            }
+      return this;
+      }
+
+//---------------------------------------------------------
+//   Part::masterPart
+//---------------------------------------------------------
+
+Part* Part::masterPart()
+      {
+      return const_cast<Part*>(const_cast<const Part*>(this)->masterPart());
+      }
+
+//---------------------------------------------------------
+//   readProperties
+//---------------------------------------------------------
+
+bool Part::readProperties(XmlReader& e)
+      {
+      const QStringRef& tag(e.name());
+      if (tag == "Staff") {
+            Staff* staff = new Staff(score());
+            staff->setPart(this);
+            score()->staves().push_back(staff);
+            _staves.push_back(staff);
+            staff->read(e);
+            }
+      else if (tag == "Instrument") {
+            Instrument* instr = new Instrument;
+            instr->read(e, this);
+            setInstrument(instr, Fraction(-1, 1));
+            }
+      else if (tag == "name")
+            instrument()->setLongName(e.readElementText());
+      else if (tag == "color")
+            _color = e.readInt();
+      else if (tag == "shortName")
+            instrument()->setShortName(e.readElementText());
+      else if (tag == "trackName")
+            _partName = e.readElementText();
+      else if (tag == "show")
+            _show = e.readInt();
+      else if (tag == "preferSharpFlat")
+            _preferSharpFlat =
+               e.readElementText() == "sharps" ? PreferSharpFlat::SHARPS : PreferSharpFlat::FLATS;
+      else
+            return false;
+      return true;
+      }
+
+//---------------------------------------------------------
 //   read
 //---------------------------------------------------------
 
 void Part::read(XmlReader& e)
       {
       while (e.readNextStartElement()) {
-            const QStringRef& tag(e.name());
-            if (tag == "Staff") {
-                  Staff* staff = new Staff(_score);
-                  staff->setPart(this);
-                  _score->staves().push_back(staff);
-                  _staves.push_back(staff);
-                  staff->read(e);
-                  }
-            else if (tag == "Instrument") {
-                  Instrument* instr = new Instrument;
-                  instr->read(e);
-                  setInstrument(instr, -1);
-                  }
-            else if (tag == "name")
-                  instrument()->setLongName(e.readElementText());
-            else if (tag == "shortName")
-                  instrument()->setShortName(e.readElementText());
-            else if (tag == "trackName")
-                  _partName = e.readElementText();
-            else if (tag == "show")
-                  _show = e.readInt();
-            else
+            if (!readProperties(e))
                   e.unknown();
             }
       if (_partName.isEmpty())
@@ -95,15 +148,20 @@ void Part::read(XmlReader& e)
 //   write
 //---------------------------------------------------------
 
-void Part::write(Xml& xml) const
+void Part::write(XmlWriter& xml) const
       {
-      xml.stag("Part");
-      foreach(const Staff* staff, _staves)
+      xml.stag(this);
+      for (const Staff* staff : _staves)
             staff->write(xml);
       if (!_show)
             xml.tag("show", _show);
       xml.tag("trackName", _partName);
-      instrument()->write(xml);
+      if (_color != DEFAULT_COLOR)
+            xml.tag("color", _color);
+      if (_preferSharpFlat != PreferSharpFlat::DEFAULT)
+            xml.tag("preferSharpFlat",
+               _preferSharpFlat == PreferSharpFlat::SHARPS ? "sharps" : "flats");
+      instrument()->write(xml, this);
       xml.etag();
       }
 
@@ -111,12 +169,12 @@ void Part::write(Xml& xml) const
 //   setLongNames
 //---------------------------------------------------------
 
-void Part::setLongNames(QList<StaffName>& name, int tick)
+void Part::setLongNames(QList<StaffName>& name, const Fraction& tick)
       {
       instrument(tick)->longNames() = name;
       }
 
-void Part::setShortNames(QList<StaffName>& name, int tick)
+void Part::setShortNames(QList<StaffName>& name, const Fraction& tick)
       {
       instrument(tick)->shortNames() = name;
       }
@@ -132,13 +190,13 @@ void Part::setStaves(int n)
             qDebug("Part::setStaves(): remove staves not implemented!");
             return;
             }
-      int staffIdx = _score->staffIdx(this) + ns;
+      int staffIdx = score()->staffIdx(this) + ns;
       for (int i = ns; i < n; ++i) {
-            Staff* staff = new Staff(_score);
+            Staff* staff = new Staff(score());
             staff->setPart(this);
             _staves.push_back(staff);
-            _score->staves().insert(staffIdx, staff);
-            for (Measure* m = _score->firstMeasure(); m; m = m->nextMeasure()) {
+            score()->staves().insert(staffIdx, staff);
+            for (Measure* m = score()->firstMeasure(); m; m = m->nextMeasure()) {
                   m->insertStaff(staff, staffIdx);
                   if (m->hasMMRest())
                         m->mmRest()->insertStaff(staff, staffIdx);
@@ -179,100 +237,9 @@ void Part::removeStaff(Staff* staff)
 void Part::setMidiProgram(int program, int bank)
       {
       Channel* c = instrument()->channel(0);
-      c->program = program;
-      c->bank    = bank;
-      c->updateInitList();
+      c->setProgram(program);
+      c->setBank(bank);
 //      instrument()->setChannel(0, c);
-      }
-
-//---------------------------------------------------------
-//   volume
-//---------------------------------------------------------
-
-int Part::volume() const
-      {
-      return instrument()->channel(0)->volume;
-      }
-
-//---------------------------------------------------------
-//   setVolume
-//---------------------------------------------------------
-
-void Part::setVolume(int volume)
-      {
-      instrument()->channel(0)->volume = volume;
-      }
-
-//---------------------------------------------------------
-//   mute
-//---------------------------------------------------------
-
-bool Part::mute() const
-      {
-      return instrument()->channel(0)->mute;
-      }
-
-//---------------------------------------------------------
-//   setMute
-//---------------------------------------------------------
-
-void Part::setMute(bool mute)
-      {
-      instrument()->channel(0)->mute = mute;
-      }
-
-//---------------------------------------------------------
-//   reverb
-//---------------------------------------------------------
-
-int Part::reverb() const
-      {
-      return instrument()->channel(0)->reverb;
-      }
-
-//---------------------------------------------------------
-//   setReverb
-//---------------------------------------------------------
-
-void Part::setReverb(int val)
-      {
-      instrument()->channel(0)->reverb = val;
-      }
-
-//---------------------------------------------------------
-//   chorus
-//---------------------------------------------------------
-
-int Part::chorus() const
-      {
-      return instrument()->channel(0)->chorus;
-      }
-
-//---------------------------------------------------------
-//   setChorus
-//---------------------------------------------------------
-
-void Part::setChorus(int val)
-      {
-      instrument()->channel(0)->chorus = val;
-      }
-
-//---------------------------------------------------------
-//   pan
-//---------------------------------------------------------
-
-int Part::pan() const
-      {
-      return instrument()->channel(0)->pan;
-      }
-
-//---------------------------------------------------------
-//   setPan
-//---------------------------------------------------------
-
-void Part::setPan(int pan)
-      {
-      instrument()->channel(0)->pan = pan;
       }
 
 //---------------------------------------------------------
@@ -281,7 +248,7 @@ void Part::setPan(int pan)
 
 int Part::midiProgram() const
       {
-      return instrument()->channel(0)->program;
+      return instrument()->playbackChannel(0, masterScore())->program();
       }
 
 //---------------------------------------------------------
@@ -290,7 +257,7 @@ int Part::midiProgram() const
 
 int Part::midiChannel() const
       {
-      return score()->midiChannel(instrument()->channel(0)->channel);
+      return masterScore()->midiChannel(instrument()->channel(0)->channel());
       }
 
 //---------------------------------------------------------
@@ -299,46 +266,56 @@ int Part::midiChannel() const
 
 int Part::midiPort() const
       {
-      return score()->midiPort(instrument()->channel(0)->channel);
+      return masterScore()->midiPort(instrument()->channel(0)->channel());
       }
 
 //---------------------------------------------------------
 //   setMidiChannel
-//    called from importmusicxml
+//   Called from importmusicxml, importMidi and importGtp*.
+//   Specify tick to set MIDI channel to an InstrumentChange element.
+//   Usage:
+//   setMidiChannel(channel)       to set channel
+//   setMidiChannel(-1, port)      to set port
+//   setMidiChannel(channel, port) to set both
 //---------------------------------------------------------
 
-void Part::setMidiChannel(int) const
+void Part::setMidiChannel(int ch, int port, const Fraction& tick)
       {
-      // TODO
+      Channel* channel = instrument(tick)->channel(0);
+      if (channel->channel() == -1)
+            masterScore()->addMidiMapping(channel, this, port, ch);
+      else
+            masterScore()->updateMidiMapping(channel, this, port, ch);
       }
 
 //---------------------------------------------------------
 //   setInstrument
 //---------------------------------------------------------
 
-void Part::setInstrument(Instrument* i, int tick)
+void Part::setInstrument(Instrument* i, Fraction tick)
       {
-      _instruments.setInstrument(i, tick);
+      _instruments.setInstrument(i, tick.ticks());
       }
 
-void Part::setInstrument(const Instrument&& i, int tick)
+void Part::setInstrument(const Instrument&& i, Fraction tick)
       {
-      _instruments.setInstrument(new Instrument(i), tick);
+      _instruments.setInstrument(new Instrument(i), tick.ticks());
       }
-void Part::setInstrument(const Instrument& i, int tick)
+
+void Part::setInstrument(const Instrument& i, Fraction tick)
       {
-      _instruments.setInstrument(new Instrument(i), tick);
+      _instruments.setInstrument(new Instrument(i), tick.ticks());
       }
 
 //---------------------------------------------------------
 //   removeInstrument
 //---------------------------------------------------------
 
-void Part::removeInstrument(int tick)
+void Part::removeInstrument(const Fraction& tick)
       {
-      auto i = _instruments.find(tick);
+      auto i = _instruments.find(tick.ticks());
       if (i == _instruments.end()) {
-            qDebug("Part::removeInstrument: not found at tick %d", tick);
+            qDebug("Part::removeInstrument: not found at tick %d", tick.ticks());
             return;
             }
       _instruments.erase(i);
@@ -348,25 +325,34 @@ void Part::removeInstrument(int tick)
 //   instrument
 //---------------------------------------------------------
 
-Instrument* Part::instrument(int tick)
+Instrument* Part::instrument(Fraction tick)
       {
-      return _instruments.instrument(tick);
+      return _instruments.instrument(tick.ticks());
       }
 
 //---------------------------------------------------------
 //   instrument
 //---------------------------------------------------------
 
-const Instrument* Part::instrument(int tick) const
+const Instrument* Part::instrument(Fraction tick) const
       {
-      return _instruments.instrument(tick);
+      return _instruments.instrument(tick.ticks());
+      }
+
+//---------------------------------------------------------
+//   instruments
+//---------------------------------------------------------
+
+const InstrumentList* Part::instruments() const
+      {
+      return &_instruments;
       }
 
 //---------------------------------------------------------
 //   instrumentId
 //---------------------------------------------------------
 
-QString Part::instrumentId(int tick) const
+QString Part::instrumentId(const Fraction& tick) const
       {
       return instrument(tick)->instrumentId();
       }
@@ -375,17 +361,17 @@ QString Part::instrumentId(int tick) const
 //   longName
 //---------------------------------------------------------
 
-QString Part::longName(int tick) const
+QString Part::longName(const Fraction& tick) const
       {
       const QList<StaffName>& nl = longNames(tick);
-      return nl.isEmpty() ? "" : nl[0].name();
+      return nl.empty() ? "" : nl[0].name();
       }
 
 //---------------------------------------------------------
 //   instrumentName
 //---------------------------------------------------------
 
-QString Part::instrumentName(int tick) const
+QString Part::instrumentName(const Fraction& tick) const
       {
       return instrument(tick)->trackName();
       }
@@ -394,10 +380,10 @@ QString Part::instrumentName(int tick) const
 //   shortName
 //---------------------------------------------------------
 
-QString Part::shortName(int tick) const
+QString Part::shortName(const Fraction& tick) const
       {
       const QList<StaffName>& nl = shortNames(tick);
-      return nl.isEmpty() ? "" : nl[0].name();
+      return nl.empty() ? "" : nl[0].name();
       }
 
 //---------------------------------------------------------
@@ -424,7 +410,7 @@ void Part::setShortName(const QString& s)
 
 void Part::setPlainLongName(const QString& s)
       {
-      setLongName(Xml::xmlString(s));
+      setLongName(XmlWriter::xmlString(s));
       }
 
 //---------------------------------------------------------
@@ -433,30 +419,22 @@ void Part::setPlainLongName(const QString& s)
 
 void Part::setPlainShortName(const QString& s)
       {
-      setShortName(Xml::xmlString(s));
+      setShortName(XmlWriter::xmlString(s));
       }
 
 //---------------------------------------------------------
 //   getProperty
 //---------------------------------------------------------
 
-QVariant Part::getProperty(P_ID id) const
+QVariant Part::getProperty(Pid id) const
       {
       switch (id) {
-            case P_ID::VISIBLE:
+            case Pid::VISIBLE:
                   return QVariant(_show);
-            case P_ID::USE_DRUMSET:
+            case Pid::USE_DRUMSET:
                   return instrument()->useDrumset();
-            case P_ID::PART_VOLUME:
-                  return volume();
-            case P_ID::PART_MUTE:
-                  return mute();
-            case P_ID::PART_PAN:
-                  return pan();
-            case P_ID::PART_REVERB:
-                  return reverb();
-            case P_ID::PART_CHORUS:
-                  return chorus();
+            case Pid::PREFER_SHARP_FLAT:
+                  return int(preferSharpFlat());
             default:
                   return QVariant();
             }
@@ -466,41 +444,23 @@ QVariant Part::getProperty(P_ID id) const
 //   setProperty
 //---------------------------------------------------------
 
-bool Part::setProperty(P_ID id, const QVariant& property)
+bool Part::setProperty(Pid id, const QVariant& property)
       {
       switch (id) {
-            case P_ID::VISIBLE:
+            case Pid::VISIBLE:
                   setShow(property.toBool());
-                  for (Measure* m = score()->firstMeasure(); m; m = m->nextMeasure()) {
-                        m->setDirty();
-                        if (m->mmRest())
-                              m->mmRest()->setDirty();
-                        break;
-                        }
                   break;
-            case P_ID::USE_DRUMSET:
+            case Pid::USE_DRUMSET:
                   instrument()->setUseDrumset(property.toBool());
                   break;
-            case P_ID::PART_VOLUME:
-                  setVolume(property.toInt());
-                  break;
-            case P_ID::PART_MUTE:
-                  setMute(property.toBool());
-                  break;
-            case P_ID::PART_PAN:
-                  setPan(property.toInt());
-                  break;
-            case P_ID::PART_REVERB:
-                  setReverb(property.toInt());
-                  break;
-            case P_ID::PART_CHORUS:
-                  setChorus(property.toInt());
+            case Pid::PREFER_SHARP_FLAT:
+                  setPreferSharpFlat(PreferSharpFlat(property.toInt()));
                   break;
             default:
                   qDebug("Part::setProperty: unknown id %d", int(id));
                   break;
             }
-      score()->setLayoutAll(true);
+      score()->setLayoutAll();
       return true;
       }
 
@@ -526,28 +486,28 @@ int Part::endTrack() const
 //   insertTime
 //---------------------------------------------------------
 
-void Part::insertTime(int tick, int len)
+void Part::insertTime(const Fraction& tick, const Fraction& len)
       {
-      if (len == 0)
+      if (len.isZero())
             return;
 
       // move all instruments
 
-      if (len < 0) {
+      if (len < Fraction(0,1)) {
             // remove instruments between tickpos >= tick and tickpos < (tick+len)
             // ownership goes back to class InstrumentChange()
 
-            auto si = _instruments.lower_bound(tick);
-            auto ei = _instruments.lower_bound(tick-len);
+            auto si = _instruments.lower_bound(tick.ticks());
+            auto ei = _instruments.lower_bound((tick-len).ticks());
             _instruments.erase(si, ei);
             }
 
       InstrumentList il;
-      for (auto i = _instruments.lower_bound(tick); i != _instruments.end();) {
+      for (auto i = _instruments.lower_bound(tick.ticks()); i != _instruments.end();) {
             Instrument* instrument = i->second;
-            int tick = i->first;
+            int t = i->first;
             _instruments.erase(i++);
-            _instruments[tick + len] = instrument;
+            _instruments[t + len.ticks()] = instrument;
             }
       _instruments.insert(il.begin(), il.end());
       }
@@ -556,34 +516,40 @@ void Part::insertTime(int tick, int len)
 //   lyricCount
 //---------------------------------------------------------
 
-int Part::lyricCount()
+int Part::lyricCount() const
       {
       if (!score())
             return 0;
-      int count = 0;
-      Segment::Type st = Segment::Type::ChordRest;
+      size_t count = 0;
+      SegmentType st = SegmentType::ChordRest;
       for (Segment* seg = score()->firstMeasure()->first(st); seg; seg = seg->next1(st)) {
             for (int i = startTrack(); i < endTrack() ; ++i) {
-                  if (seg->lyricsList(i))
-                        count += seg->lyricsList(i)->size();
+                  ChordRest* cr = toChordRest(seg->element(i));
+                  if (cr)
+                        count += cr->lyrics().size();
                   }
             }
-      return count;
+      return int(count);
       }
 
 //---------------------------------------------------------
 //   harmonyCount
 //---------------------------------------------------------
 
-int Part::harmonyCount()
+int Part::harmonyCount() const
       {
       if (!score())
             return 0;
+
+      Measure* firstM = score()->firstMeasure();
+      if (!firstM)
+            return 0;
+
+      SegmentType st = SegmentType::ChordRest;
       int count = 0;
-      Segment::Type st = Segment::Type::ChordRest;
-      for (Segment* seg = score()->firstMeasure()->first(st); seg; seg = seg->next1(st)) {
-            for (Element* e : seg->annotations()) {
-                  if (e->type() == Element::Type::HARMONY && e->track() >= startTrack() && e->track() < endTrack())
+      for (const Segment* seg = firstM->first(st); seg; seg = seg->next1(st)) {
+            for (const Element* e : seg->annotations()) {
+                  if (e->type() == ElementType::HARMONY && e->track() >= startTrack() && e->track() < endTrack())
                         count++;
                   }
             }
@@ -591,15 +557,82 @@ int Part::harmonyCount()
       }
 
 //---------------------------------------------------------
+//   updateHarmonyChannels
+///   update the harmony channel by creating a new channel
+///   when appropriate or using the existing one
+///
+///   checkRemoval can be set to true to check to see if we
+///   can remove the harmony channel
+//---------------------------------------------------------
+void Part::updateHarmonyChannels(bool isDoOnInstrumentChanged, bool checkRemoval)
+      {
+
+      auto onInstrumentChanged = [this]() {
+            masterScore()->rebuildMidiMapping();
+            masterScore()->updateChannel();
+            score()->setInstrumentsChanged(true);
+            score()->setLayoutAll(); //do we need this?
+            };
+
+
+      // usage of harmony count is okay even if expensive since checking harmony channel will shortcircuit if existent
+      // harmonyCount will only be called on loading of a score (where it will need to be scanned for harmony anyway)
+      // or when the first harmony of a score is just added
+      if (checkRemoval) {
+            //may be a bit expensive since it gets called after every single delete or undo, but it should be okay for now
+            //~OPTIM~
+            if (harmonyCount() == 0) {
+                  Instrument* instr = instrument();
+                  int hChIdx = instr->channelIdx(Channel::HARMONY_NAME);
+                  if (hChIdx != -1) {
+                        Channel* hChan = instr->channel(hChIdx);
+                        instr->removeChannel(hChan);
+                        delete hChan;
+                        if (isDoOnInstrumentChanged)
+                              onInstrumentChanged();
+                        return;
+                        }
+                  }
+            }
+
+      if (!harmonyChannel() && harmonyCount() > 0) {
+            Instrument* instr = instrument();
+            Channel* c = new Channel(*instr->channel(0));
+            c->setName(qApp->translate("channel", Channel::HARMONY_NAME));
+            instr->appendChannel(c);
+            onInstrumentChanged();
+            }
+      }
+
+//---------------------------------------------------------
+//   harmonyChannel
+//---------------------------------------------------------
+
+const Channel* Part::harmonyChannel() const
+      {
+           const Instrument* instr = instrument();
+           if (!instr)
+                 return nullptr;
+
+           int chanIdx = instr->channelIdx(Channel::HARMONY_NAME);
+           if (chanIdx == -1)
+                 return nullptr;
+
+           const Channel* chan = instr->channel(chanIdx);
+           Q_ASSERT(chan);
+           return chan;
+      }
+
+//---------------------------------------------------------
 //   hasPitchedStaff
 //---------------------------------------------------------
 
-bool Part::hasPitchedStaff()
+bool Part::hasPitchedStaff() const
       {
       if (!staves())
             return false;
       for (Staff* s : *staves()) {
-            if (s && s->isPitchedStaff())
+            if (s && s->isPitchedStaff(Fraction(0,1)))
                   return true;
             }
       return false;
@@ -609,12 +642,12 @@ bool Part::hasPitchedStaff()
 //   hasTabStaff
 //---------------------------------------------------------
 
-bool Part::hasTabStaff()
+bool Part::hasTabStaff() const
       {
       if (!staves())
             return false;
       for (Staff* s : *staves()) {
-            if (s && s->isTabStaff())
+            if (s && s->isTabStaff(Fraction(0,1)))
                   return true;
             }
       return false;
@@ -624,12 +657,12 @@ bool Part::hasTabStaff()
 //   hasDrumStaff
 //---------------------------------------------------------
 
-bool Part::hasDrumStaff()
+bool Part::hasDrumStaff() const
       {
       if (!staves())
             return false;
       for (Staff* s : *staves()) {
-            if (s && s->isDrumStaff())
+            if (s && s->isDrumStaff(Fraction(0,1)))
                   return true;
             }
       return false;

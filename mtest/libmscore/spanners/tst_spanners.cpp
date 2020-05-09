@@ -23,6 +23,7 @@
 #include "libmscore/score.h"
 #include "libmscore/system.h"
 #include "libmscore/undo.h"
+#include "libmscore/line.h"
 
 #define DIR QString("libmscore/spanners/")
 
@@ -44,13 +45,16 @@ class TestSpanners : public QObject, public MTest
       void spanners04();            // linking a staff to a staff containing a glissando
       void spanners05();            // creating part from an existing staff containing a glissando
       void spanners06();            // add a glissando to a staff with a linked staff
-      void spanners07();            // add a glissando to a satff with an excerpt attached
-      void spanners08();            // delete a lyrics with separator and undo
+      void spanners07();            // add a glissando to a staff with an excerpt attached
+//      void spanners08();            // delete a lyrics with separator and undo
       void spanners09();            // remove a measure containing the end point of a LyricsLine and undo
       void spanners10();            // remove a measure containing the start point of a LyricsLine and undo
       void spanners11();            // remove a measure entirely containing a LyricsLine and undo
       void spanners12();            // remove a measure containing the middle portion of a LyricsLine and undo
-      void spanners13();            // drop a line break at the middle of a LyricsLine and check LyricsLineSegments
+//      void spanners13();            // drop a line break at the middle of a LyricsLine and check LyricsLineSegments
+      void spanners14();            // creating part from an existing grand staff containing a cross staff glissando
+      void spanners15();            // change the color & min distance of a line and save it
+      void spanners16();            // read lines with manual adjustments on a small staff and save
       };
 
 //---------------------------------------------------------
@@ -69,27 +73,26 @@ void TestSpanners::initTestCase()
 
 void TestSpanners::spanners01()
       {
-      DropData    dropData;
+      EditData    dropData(0);
       Glissando*  gliss;
 
-      Score* score = readScore(DIR + "glissando01.mscx");
+      MasterScore* score = readScore(DIR + "glissando01.mscx");
       QVERIFY(score);
-      score->doLayout();
 
       // SIMPLE CASE: GLISSANDO FROM A NOTE TO THE FOLLOWING
       // go to top note of first chord
       Measure*    msr   = score->firstMeasure();
       QVERIFY(msr);
-      Segment*    seg   = msr->findSegment(Segment::Type::ChordRest, 0);
+      Segment*    seg   = msr->findSegment(SegmentType::ChordRest, Fraction(0,1));
       QVERIFY(seg);
       Ms::Chord*      chord = static_cast<Ms::Chord*>(seg->element(0));
-      QVERIFY(chord && chord->type() == Element::Type::CHORD);
+      QVERIFY(chord && chord->type() == ElementType::CHORD);
       Note*       note  = chord->upNote();
       QVERIFY(note);
       // drop a glissando on note
       gliss             = new Glissando(score); // create a new element each time, as drop() will eventually delete it
       dropData.pos      = note->pagePos();
-      dropData.element  = gliss;
+      dropData.dropElement  = gliss;
       note->drop(dropData);
 
       // GLISSANDO FROM TOP STAFF TO BOTTOM STAFF
@@ -99,13 +102,13 @@ void TestSpanners::spanners01()
       seg   = msr->first();
       QVERIFY(seg);
       chord = static_cast<Ms::Chord*>(seg->element(0));   // voice 0 of staff 0
-      QVERIFY(chord && chord->type() == Element::Type::CHORD);
+      QVERIFY(chord && chord->type() == ElementType::CHORD);
       note  = chord->upNote();
       QVERIFY(note);
       // drop a glissando on note
       gliss             = new Glissando(score);
       dropData.pos      = note->pagePos();
-      dropData.element  = gliss;
+      dropData.dropElement  = gliss;
       note->drop(dropData);
 
       // GLISSANDO FROM BOTTOM STAFF TO TOP STAFF
@@ -115,13 +118,13 @@ void TestSpanners::spanners01()
       seg   = msr->first();
       QVERIFY(seg);
       chord = static_cast<Ms::Chord*>(seg->element(4));   // voice 0 of staff 1
-      QVERIFY(chord && chord->type() == Element::Type::CHORD);
+      QVERIFY(chord && chord->type() == ElementType::CHORD);
       note  = chord->upNote();
       QVERIFY(note);
       // drop a glissando on note
       gliss             = new Glissando(score);
       dropData.pos      = note->pagePos();
-      dropData.element  = gliss;
+      dropData.dropElement  = gliss;
       note->drop(dropData);
 
       // GLISSANDO OVER INTERVENING NOTES IN ANOTHER VOICE
@@ -131,13 +134,13 @@ void TestSpanners::spanners01()
       seg   = msr->first();
       QVERIFY(seg);
       chord = static_cast<Ms::Chord*>(seg->element(0));   // voice 0 of staff 0
-      QVERIFY(chord && chord->type() == Element::Type::CHORD);
+      QVERIFY(chord && chord->type() == ElementType::CHORD);
       note  = chord->upNote();
       QVERIFY(note);
       // drop a glissando on note
       gliss             = new Glissando(score);
       dropData.pos      = note->pagePos();
-      dropData.element  = gliss;
+      dropData.dropElement  = gliss;
       note->drop(dropData);
 
       // GLISSANDO OVER INTERVENING NOTES IN ANOTHER STAFF
@@ -147,13 +150,13 @@ void TestSpanners::spanners01()
       seg   = msr->first();
       QVERIFY(seg);
       chord = static_cast<Ms::Chord*>(seg->element(0));   // voice 0 of staff 0
-      QVERIFY(chord && chord->type() == Element::Type::CHORD);
+      QVERIFY(chord && chord->type() == ElementType::CHORD);
       note  = chord->upNote();
       QVERIFY(note);
       // drop a glissando on note
       gliss             = new Glissando(score);
       dropData.pos      = note->pagePos();
-      dropData.element  = gliss;
+      dropData.dropElement  = gliss;
       note->drop(dropData);
 
       QVERIFY(saveCompareScore(score, "glissando01.mscx", DIR + "glissando01-ref.mscx"));
@@ -171,11 +174,10 @@ void TestSpanners::spanners01()
 
 void TestSpanners::spanners02()
       {
-      Score* score = readScore(DIR + "glissando-crossstaff01.mscx");
+      MasterScore* score = readScore(DIR + "glissando-crossstaff01.mscx");
       QVERIFY(score);
-      score->doLayout();
 
-      QVERIFY(saveCompareScore(score, "glissando-crsossstaff01.mscx", DIR + "glissando-crossstaff01-ref.mscx"));
+      QVERIFY(saveCompareScore(score, "glissando-crossstaff01.mscx", DIR + "glissando-crossstaff01-ref.mscx"));
       delete score;
       }
 
@@ -186,38 +188,37 @@ void TestSpanners::spanners02()
 
 void TestSpanners::spanners03()
       {
-      DropData    dropData;
+      EditData    dropData(0);
       Glissando*  gliss;
 
-      Score* score = readScore(DIR + "glissando-graces01.mscx");
+      MasterScore* score = readScore(DIR + "glissando-graces01.mscx");
       QVERIFY(score);
-      score->doLayout();
 
       // GLISSANDO FROM MAIN NOTE TO AFTER-GRACE
       // go to top note of first chord
       Measure*    msr   = score->firstMeasure();
       QVERIFY(msr);
-      Segment*    seg   = msr->findSegment(Segment::Type::ChordRest, 0);
+      Segment*    seg   = msr->findSegment(SegmentType::ChordRest, Fraction(0,1));
       QVERIFY(seg);
       Ms::Chord*      chord = static_cast<Ms::Chord*>(seg->element(0));
-      QVERIFY(chord && chord->type() == Element::Type::CHORD);
+      QVERIFY(chord && chord->type() == ElementType::CHORD);
       Note*       note  = chord->upNote();
       QVERIFY(note);
       // drop a glissando on note
       gliss             = new Glissando(score); // create a new element each time, as drop() will eventually delete it
       dropData.pos      = note->pagePos();
-      dropData.element  = gliss;
+      dropData.dropElement  = gliss;
       note->drop(dropData);
 
       // GLISSANDO FROM AFTER-GRACE TO BEFORE-GRACE OF NEXT CHORD
       // go to last after-grace of chord and drop a glissando on it
       Ms::Chord*      grace = chord->graceNotesAfter().last();
-      QVERIFY(grace && grace->type() == Element::Type::CHORD);
+      QVERIFY(grace && grace->type() == ElementType::CHORD);
       note              = grace->upNote();
       QVERIFY(note);
       gliss             = new Glissando(score);
       dropData.pos      = note->pagePos();
-      dropData.element  = gliss;
+      dropData.dropElement  = gliss;
       note->drop(dropData);
 
       // GLISSANDO FROM MAIN NOTE TO BEFORE-GRACE OF NEXT CHORD
@@ -225,12 +226,12 @@ void TestSpanners::spanners03()
       seg               = seg->nextCR(0);
       QVERIFY(seg);
       chord             = static_cast<Ms::Chord*>(seg->element(0));
-      QVERIFY(chord && chord->type() == Element::Type::CHORD);
+      QVERIFY(chord && chord->type() == ElementType::CHORD);
       note              = chord->upNote();
       QVERIFY(note);
       gliss             = new Glissando(score);
       dropData.pos      = note->pagePos();
-      dropData.element  = gliss;
+      dropData.dropElement  = gliss;
       note->drop(dropData);
 
       // GLISSANDO FROM BEFORE-GRACE TO MAIN NOTE
@@ -238,15 +239,15 @@ void TestSpanners::spanners03()
       seg               = seg->nextCR(0);
       QVERIFY(seg);
       chord             = static_cast<Ms::Chord*>(seg->element(0));
-      QVERIFY(chord && chord->type() == Element::Type::CHORD);
+      QVERIFY(chord && chord->type() == ElementType::CHORD);
       // go to its last before-grace note
       grace             = chord->graceNotesBefore().last();
-      QVERIFY(grace && grace->type() == Element::Type::CHORD);
+      QVERIFY(grace && grace->type() == ElementType::CHORD);
       note              = grace->upNote();
       QVERIFY(note);
       gliss             = new Glissando(score);
       dropData.pos      = note->pagePos();
-      dropData.element  = gliss;
+      dropData.dropElement  = gliss;
       note->drop(dropData);
 
       QVERIFY(saveCompareScore(score, "glissando-graces01.mscx", DIR + "glissando-graces01-ref.mscx"));
@@ -260,25 +261,23 @@ void TestSpanners::spanners03()
 
 void TestSpanners::spanners04()
       {
-
-      Score* score = readScore(DIR + "glissando-cloning01.mscx");
+      MasterScore* score = readScore(DIR + "glissando-cloning01.mscx");
       QVERIFY(score);
-      score->doLayout();
 
       // add a linked staff to the existing staff
       // (copied and adapted from void MuseScore::editInstrList() in mscore/instrdialog.cpp)
       Staff* oldStaff   = score->staff(0);
       Staff* newStaff   = new Staff(score);
       newStaff->setPart(oldStaff->part());
-      newStaff->initFromStaffType(oldStaff->staffType());
+      newStaff->initFromStaffType(oldStaff->staffType(Fraction(0,1)));
       newStaff->setDefaultClefType(ClefTypeList(ClefType::G));
 
       KeySigEvent ke;
       ke.setKey(Key::C);
-      newStaff->setKey(0, ke);
+      newStaff->setKey(Fraction(0,1), ke);
 
       score->undoInsertStaff(newStaff, 1, false);
-      cloneStaff(oldStaff, newStaff);
+      Excerpt::cloneStaff(oldStaff, newStaff);
 
       QVERIFY(saveCompareScore(score, "glissando-cloning01.mscx", DIR + "glissando-cloning01-ref.mscx"));
       delete score;
@@ -291,10 +290,8 @@ void TestSpanners::spanners04()
 
 void TestSpanners::spanners05()
       {
-
-      Score* score = readScore(DIR + "glissando-cloning02.mscx");
+      MasterScore* score = readScore(DIR + "glissando-cloning02.mscx");
       QVERIFY(score);
-      score->doLayout();
 
       // create parts
       // (copied and adapted from void TestParts::createParts() in mtest/libmscore/parts/tst_parts.cpp)
@@ -302,15 +299,17 @@ void TestSpanners::spanners05()
       parts.append(score->parts().at(0));
       Score* nscore = new Score(score);
 
-      Excerpt ex(score);
-      ex.setPartScore(nscore);
-      ex.setTitle(parts.front()->longName());
-      ex.setParts(parts);
-      ::createExcerpt(&ex);
+      Excerpt* ex = new Excerpt(score);
+      ex->setPartScore(nscore);
+      ex->setTitle(parts.front()->longName());
+      ex->setParts(parts);
+      Excerpt::createExcerpt(ex);
       QVERIFY(nscore);
 
-      nscore->setName(parts.front()->partName());
-      score->undo(new AddExcerpt(nscore));
+//      nscore->setName(parts.front()->partName());
+
+//      QMultiMap<int, int> tracks;
+      score->Score::undo(new AddExcerpt(ex));
 
       QVERIFY(saveCompareScore(score, "glissando-cloning02.mscx", DIR + "glissando-cloning02-ref.mscx"));
       delete score;
@@ -323,26 +322,25 @@ void TestSpanners::spanners05()
 
 void TestSpanners::spanners06()
       {
-      DropData    dropData;
+      EditData    dropData(0);
       Glissando*  gliss;
 
-      Score* score = readScore(DIR + "glissando-cloning03.mscx");
+      MasterScore* score = readScore(DIR + "glissando-cloning03.mscx");
       QVERIFY(score);
-      score->doLayout();
 
       // DROP A GLISSANDO ON FIRST NOTE
       Measure*    msr   = score->firstMeasure();
       QVERIFY(msr);
-      Segment*    seg   = msr->findSegment(Segment::Type::ChordRest, 0);
+      Segment*    seg   = msr->findSegment(SegmentType::ChordRest, Fraction(0,1));
       QVERIFY(seg);
       Ms::Chord*      chord = static_cast<Ms::Chord*>(seg->element(0));
-      QVERIFY(chord && chord->type() == Element::Type::CHORD);
+      QVERIFY(chord && chord->type() == ElementType::CHORD);
       Note*       note  = chord->upNote();
       QVERIFY(note);
       // drop a glissando on note
       gliss             = new Glissando(score);
       dropData.pos      = note->pagePos();
-      dropData.element  = gliss;
+      dropData.dropElement  = gliss;
       note->drop(dropData);
 
       QVERIFY(saveCompareScore(score, "glissando-cloning03.mscx", DIR + "glissando-cloning03-ref.mscx"));
@@ -356,32 +354,31 @@ void TestSpanners::spanners06()
 
 void TestSpanners::spanners07()
       {
-      DropData    dropData;
+      EditData    dropData(0);
       Glissando*  gliss;
 
-      Score* score = readScore(DIR + "glissando-cloning04.mscx");
+      MasterScore* score = readScore(DIR + "glissando-cloning04.mscx");
       QVERIFY(score);
-      score->doLayout();
 
       // DROP A GLISSANDO ON FIRST NOTE
       Measure*    msr   = score->firstMeasure();
       QVERIFY(msr);
-      Segment*    seg   = msr->findSegment(Segment::Type::ChordRest, 0);
+      Segment*    seg   = msr->findSegment(SegmentType::ChordRest, Fraction(0,1));
       QVERIFY(seg);
       Ms::Chord*      chord = static_cast<Ms::Chord*>(seg->element(0));
-      QVERIFY(chord && chord->type() == Element::Type::CHORD);
+      QVERIFY(chord && chord->type() == ElementType::CHORD);
       Note*       note  = chord->upNote();
       QVERIFY(note);
       // drop a glissando on note
       gliss             = new Glissando(score);
       dropData.pos      = note->pagePos();
-      dropData.element  = gliss;
+      dropData.dropElement  = gliss;
       note->drop(dropData);
 
       QVERIFY(saveCompareScore(score, "glissando-cloning04.mscx", DIR + "glissando-cloning04-ref.mscx"));
       delete score;
       }
-
+#if 0
 //---------------------------------------------------------
 ///  spanners08
 ///   Delete a lyrics with separator and undo
@@ -389,24 +386,23 @@ void TestSpanners::spanners07()
 
 void TestSpanners::spanners08()
       {
-      Score* score = readScore(DIR + "lyricsline01.mscx");
+      MasterScore* score = readScore(DIR + "lyricsline01.mscx");
       QVERIFY(score);
-      score->doLayout();
 
       // verify initial LyricsLine setup
-      System* sys = score->systems()->at(0);
+      System* sys = score->systems().at(0);
       QVERIFY(sys->spannerSegments().size() == 1);
       QVERIFY(score->unmanagedSpanners().size() == 1);
 
       // DELETE LYRICS
       Measure*    msr   = score->firstMeasure();
       QVERIFY(msr);
-      Segment*    seg   = msr->findSegment(Segment::Type::ChordRest, 0);
+      Segment*    seg   = msr->findSegment(SegmentType::ChordRest, 0);
       QVERIFY(seg);
       Ms::Chord*      chord = static_cast<Ms::Chord*>(seg->element(0));
-      QVERIFY(chord && chord->type() == Element::Type::CHORD);
-      QVERIFY(chord->lyricsList().size() > 0);
-      Lyrics*     lyr   = chord->lyrics(0);
+      QVERIFY(chord && chord->type() == ElementType::CHORD);
+      QVERIFY(chord->lyrics().size() > 0);
+      Lyrics*     lyr   = chord->lyrics(0, Element::Placement::BELOW);
       score->startCmd();
       score->undoRemoveElement(lyr);
       score->endCmd();
@@ -419,7 +415,7 @@ void TestSpanners::spanners08()
       QVERIFY(saveCompareScore(score, "lyricsline01.mscx", DIR + "lyricsline01-ref.mscx"));
 
       // UNDO
-      score->undo()->undo();
+      score->undoStack()->undo();
       score->doLayout();
 
       // verify setup after undo
@@ -430,7 +426,7 @@ void TestSpanners::spanners08()
       QVERIFY(saveCompareScore(score, "lyricsline01.mscx", DIR + "lyricsline01.mscx"));
       delete score;
       }
-
+#endif
 //---------------------------------------------------------
 ///  spanners09
 ///   Remove a measure containing the end point of a LyricsLine and undo
@@ -442,23 +438,23 @@ void TestSpanners::spanners08()
 
 void TestSpanners::spanners09()
       {
-      Score* score = readScore(DIR + "lyricsline02.mscx");
+      MasterScore* score = readScore(DIR + "lyricsline02.mscx");
       QVERIFY(score);
-      score->doLayout();
 
       // DELETE SECOND MEASURE AND VERIFY
-      Measure*    msr   = score->firstMeasure();
+      Measure* msr   = score->firstMeasure();
       QVERIFY(msr);
       msr = msr->nextMeasure();
       QVERIFY(msr);
       score->startCmd();
       score->select(msr);
-      score->cmdDeleteSelectedMeasures();
+      score->cmdTimeDelete();
       score->endCmd();
       QVERIFY(saveCompareScore(score, "lyricsline02.mscx", DIR + "lyricsline02-ref.mscx"));
 
       // UNDO AND VERIFY
-      score->undo()->undo();
+      score->undoStack()->undo(&ed);
+      score->doLayout(); // measure needs to be renumbered
       QVERIFY(saveCompareScore(score, "lyricsline02.mscx", DIR + "lyricsline02.mscx"));
       delete score;
       }
@@ -474,9 +470,8 @@ void TestSpanners::spanners09()
 
 void TestSpanners::spanners10()
       {
-      Score* score = readScore(DIR + "lyricsline03.mscx");
+      MasterScore* score = readScore(DIR + "lyricsline03.mscx");
       QVERIFY(score);
-      score->doLayout();
 
       // DELETE SECOND MEASURE AND VERIFY
       Measure*    msr   = score->firstMeasure();
@@ -485,12 +480,13 @@ void TestSpanners::spanners10()
       QVERIFY(msr);
       score->startCmd();
       score->select(msr);
-      score->cmdDeleteSelectedMeasures();
+      score->cmdTimeDelete();
       score->endCmd();
       QVERIFY(saveCompareScore(score, "lyricsline03.mscx", DIR + "lyricsline03-ref.mscx"));
 
       // UNDO AND VERIFY
-      score->undo()->undo();
+      score->undoStack()->undo(&ed);
+      score->doLayout(); // measure needs to be renumbered
       QVERIFY(saveCompareScore(score, "lyricsline03.mscx", DIR + "lyricsline03.mscx"));
       delete score;
       }
@@ -506,9 +502,8 @@ void TestSpanners::spanners10()
 
 void TestSpanners::spanners11()
       {
-      Score* score = readScore(DIR + "lyricsline04.mscx");
+      MasterScore* score = readScore(DIR + "lyricsline04.mscx");
       QVERIFY(score);
-      score->doLayout();
 
       // DELETE SECOND MEASURE AND VERIFY
       Measure*    msr   = score->firstMeasure();
@@ -517,12 +512,13 @@ void TestSpanners::spanners11()
       QVERIFY(msr);
       score->startCmd();
       score->select(msr);
-      score->cmdDeleteSelectedMeasures();
+      score->cmdTimeDelete();
       score->endCmd();
       QVERIFY(saveCompareScore(score, "lyricsline04.mscx", DIR + "lyricsline04-ref.mscx"));
 
       // UNDO AND VERIFY
-      score->undo()->undo();
+      score->undoStack()->undo(&ed);
+      score->doLayout(); // measure needs to be renumbered
       QVERIFY(saveCompareScore(score, "lyricsline04.mscx", DIR + "lyricsline04.mscx"));
       delete score;
       }
@@ -538,9 +534,8 @@ void TestSpanners::spanners11()
 
 void TestSpanners::spanners12()
       {
-      Score* score = readScore(DIR + "lyricsline05.mscx");
+      MasterScore* score = readScore(DIR + "lyricsline05.mscx");
       QVERIFY(score);
-      score->doLayout();
 
       // DELETE SECOND MEASURE AND VERIFY
       Measure*    msr   = score->firstMeasure();
@@ -549,30 +544,30 @@ void TestSpanners::spanners12()
       QVERIFY(msr);
       score->startCmd();
       score->select(msr);
-      score->cmdDeleteSelectedMeasures();
+      score->cmdTimeDelete();
       score->endCmd();
       QVERIFY(saveCompareScore(score, "lyricsline05.mscx", DIR + "lyricsline05-ref.mscx"));
 
       // UNDO AND VERIFY
-      score->undo()->undo();
+      score->undoStack()->undo(&ed);
+      score->doLayout(); // measure needs to be renumbered
       QVERIFY(saveCompareScore(score, "lyricsline05.mscx", DIR + "lyricsline05.mscx"));
       delete score;
       }
-
+#if 0
 //---------------------------------------------------------
 ///  spanners13
-///   Drop a line break at a bar line inthe middle of a LyricsLine and check LyricsLineSegments are correct
+///   Drop a line break at a bar line in the middle of a LyricsLine and check LyricsLineSegments are correct
 //
 //---------------------------------------------------------
 
 void TestSpanners::spanners13()
       {
-      DropData          dropData;
+      EditData          dropData(0);
       LayoutBreak*      brk;
 
-      Score* score = readScore(DIR + "lyricsline06.mscx");
+      MasterScore* score = readScore(DIR + "lyricsline06.mscx");
       QVERIFY(score);
-      score->doLayout();
 
       // DROP A BREAK AT FIRST MEASURE AND VERIFY
       Measure*    msr   = score->firstMeasure();
@@ -580,21 +575,93 @@ void TestSpanners::spanners13()
       brk               = new LayoutBreak(score);
       brk->setLayoutBreakType(LayoutBreak::Type::LINE);
       dropData.pos      = msr->pagePos();
-      dropData.element  = brk;
+      dropData.dropElement  = brk;
       score->startCmd();
       msr->drop(dropData);
       score->endCmd();
       // VERIFY SEGMENTS IN SYSTEMS AND THEN SCORE
-      for (System* sys : *score->systems())
+      for (System* sys : score->systems())
             QVERIFY(sys->spannerSegments().size() == 1);
       QVERIFY(saveCompareScore(score, "lyricsline06.mscx", DIR + "lyricsline06-ref.mscx"));
 
       // UNDO AND VERIFY
-      score->undo()->undo();
+      score->undoStack()->undo();
       score->doLayout();      // systems need to be re-computed
       QVERIFY(saveCompareScore(score, "lyricsline06.mscx", DIR + "lyricsline06.mscx"));
       delete score;
       }
+#endif
+
+//---------------------------------------------------------
+///  spanners14
+///   creating part from an existing grand staff containing a cross staff glissando
+//---------------------------------------------------------
+
+void TestSpanners::spanners14()
+      {
+      MasterScore* score = readScore(DIR + "glissando-cloning05.mscx");
+      QVERIFY(score);
+
+      // create parts
+      // (copied and adapted from void TestParts::createParts() in mtest/libmscore/parts/tst_parts.cpp)
+      QList<Part*> parts;
+      parts.append(score->parts().at(0));
+      Score* nscore = new Score(score);
+
+      Excerpt* ex = new Excerpt(score);
+      ex->setPartScore(nscore);
+      ex->setTitle(parts.front()->longName());
+      ex->setParts(parts);
+      Excerpt::createExcerpt(ex);
+      QVERIFY(nscore);
+
+//      nscore->setName(parts.front()->partName());
+
+//      QMultiMap<int, int> tracks;
+      score->Score::undo(new AddExcerpt(ex));
+
+      QVERIFY(saveCompareScore(score, "glissando-cloning05.mscx", DIR + "glissando-cloning05-ref.mscx"));
+      delete score;
+      }
+
+//---------------------------------------------------------
+///  spanners15
+///   set the color of a spanner and save
+//---------------------------------------------------------
+
+void TestSpanners::spanners15()
+      {
+      MasterScore* score = readScore(DIR + "linecolor01.mscx");
+      QVERIFY(score);
+
+      for (auto it = score->spanner().cbegin(); it != score->spanner().cend(); ++it) {
+            Spanner* spanner = (*it).second;
+            SLine* sl = static_cast<SLine*>(spanner);
+            sl->setProperty(Pid::COLOR, QVariant::fromValue(QColor(255, 0, 0, 255)));
+            for (auto ss : sl->spannerSegments()) {
+                  ss->setProperty(Pid::MIN_DISTANCE, 0.0);
+                  ss->setPropertyFlags(Pid::MIN_DISTANCE, PropertyFlags::UNSTYLED);
+                  }
+            }
+
+      QVERIFY(saveCompareScore(score, "linecolor01.mscx", DIR + "linecolor01-ref.mscx"));
+      delete score;
+      }
+
+//---------------------------------------------------------
+///  spanners16
+///   read manually adjusted lines on a small staff and save
+//---------------------------------------------------------
+
+void TestSpanners::spanners16()
+      {
+      MasterScore* score = readScore(DIR + "smallstaff01.mscx");
+      QVERIFY(score);
+
+      QVERIFY(saveCompareScore(score, "smallstaff01.mscx", DIR + "smallstaff01-ref.mscx"));
+      delete score;
+      }
+
 
 
 QTEST_MAIN(TestSpanners)

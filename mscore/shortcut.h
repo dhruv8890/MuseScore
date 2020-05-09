@@ -1,9 +1,8 @@
 //=============================================================================
 //  MuseScore
 //  Music Composition & Notation
-//  $Id:$
 //
-//  Copyright (C) 2011 Werner Schweer and others
+//  Copyright (C) 2011-2016 Werner Schweer and others
 //
 //  This program is free software; you can redistribute it and/or modify
 //  it under the terms of the GNU General Public License version 2
@@ -21,7 +20,7 @@ The Shortcut class describes the basic configurable shortcut element.
 'Real' data are contained in 2 static member variables:
 
 1) sc[], an array of Shortcut: contains the default, built-in data for each shortcut
-      except the key sequences; it is initialized at startup (code at the begining of
+      except the key sequences; it is initialized at startup (code at the beginning of
       mscore/actions.cpp)
 2) _shortcuts, a QMap using the shortcut xml tag name as hash value: is initialized from
       data in sc via a call to Shortcut::init() in program main() (mscore/musescore.cpp).
@@ -29,7 +28,7 @@ The Shortcut class describes the basic configurable shortcut element.
       user customizations or from a resource (<= mscore/data/shortcuts.xml), if there are
       no customizations.
       Later during startup, QAction's are derived from each of its elements and pooled
-      in a single QActionGroup during MuseScore::MuseScore() costructor (mscore/musescore.cpp)
+      in a single QActionGroup during MuseScore::MuseScore() constructor (mscore/musescore.cpp)
 
 ShortcutFlags:
       To be documented
@@ -64,10 +63,9 @@ Shortcuts marked with the STATE_NEVER state should NEVER used directly as shortc
 
 #include "icons.h"
 #include "globals.h"
-
 namespace Ms {
 
-class Xml;
+class XmlWriter;
 class XmlReader;
 
 //---------------------------------------------------------
@@ -79,7 +77,8 @@ enum class ShortcutFlags : char {
       A_SCORE     = 1,
       A_CMD       = 1 << 1,
       A_CHECKABLE = 1 << 2,
-      A_CHECKED   = 1 << 3
+      A_CHECKED   = 1 << 3,
+      A_UNDO_REDO = 1 << 4,
       };
 
 constexpr ShortcutFlags operator| (ShortcutFlags t1, ShortcutFlags t2) {
@@ -115,10 +114,15 @@ class Shortcut {
       QKeySequence::StandardKey _standardKey { QKeySequence::UnknownKey };
       mutable QAction* _action               { 0 };             //! cached action
 
+      static QString source;
+
       static Shortcut _sc[];
       static QHash<QByteArray, Shortcut*> _shortcuts;
+      void translateAction(QAction* action) const;
 
    public:
+
+      static constexpr const char* defaultFileName = ":/data/shortcuts.xml";
 
       Shortcut() {}
       Shortcut(
@@ -135,6 +139,7 @@ class Shortcut {
 
       QAction* action() const;
       const QByteArray& key() const { return _key; }
+      void setKey(const QByteArray& key) { _key = key; }
       QString descr() const;
       QString text() const;
       QString help() const;
@@ -146,32 +151,40 @@ class Shortcut {
       void setState(int v)                      { _state = v;     }
       bool needsScore() const                  { return _flags & ShortcutFlags::A_SCORE; }
       bool isCmd() const                       { return _flags & ShortcutFlags::A_CMD; }
+      bool isUndoRedo() const                  { return _flags & ShortcutFlags::A_UNDO_REDO; }
       bool isCheckable() const                 { return _flags & ShortcutFlags::A_CHECKABLE; }
       bool isChecked() const                   { return _flags & ShortcutFlags::A_CHECKED; }
       Icons icon() const                       { return _icon;  }
       const QList<QKeySequence>& keys() const  { return _keys;  }
       QKeySequence::StandardKey standardKey() const { return _standardKey; }
-      void setStandardKey(QKeySequence::StandardKey k) {  _standardKey = k; }
+      void setStandardKey(QKeySequence::StandardKey k);
       void setKeys(const QList<QKeySequence>& ks);
+      void setKeys(const Shortcut&);
 
       bool compareKeys(const Shortcut&) const;
       QString keysToString() const;
       static QString getMenuShortcutString(const QMenu* menu);
 
-      void write(Ms::Xml&) const;
+      void write(Ms::XmlWriter&) const;
       void read(Ms::XmlReader&);
 
       static void init();
+      static void retranslate();
+      static void refreshIcons();
       static void load();
+      static void loadFromNewFile(QString fileLocation);
       static void save();
+      static void saveToNewFile(QString fileLocation);
       static void resetToDefault();
       static bool dirty;
+      static bool customSource() { return source != defaultFileName; }
+      static Shortcut* getShortcutByKeySequence(const QKeySequence &keySequence, const ScoreState state);
       static Shortcut* getShortcut(const char* key);
       static const QHash<QByteArray, Shortcut*>& shortcuts() { return _shortcuts; }
       static QActionGroup* getActionGroupForWidget(MsWidget w);
       static QActionGroup* getActionGroupForWidget(MsWidget w, Qt::ShortcutContext newShortcutContext);
 
-      static QString keySeqToString(const QKeySequence& keySeq, QKeySequence::SequenceFormat fmt);
+      static QString keySeqToString(const QKeySequence& keySeq, QKeySequence::SequenceFormat fmt, bool escapeKeyStr = false);
       static QKeySequence keySeqFromString(const QString& str, QKeySequence::SequenceFormat fmt);
       };
 

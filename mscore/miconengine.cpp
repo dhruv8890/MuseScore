@@ -121,35 +121,69 @@ void MIconEnginePrivate::loadDataForModeAndState(QSvgRenderer* renderer, QIcon::
                   f.open(QIODevice::ReadOnly);
                   QByteArray ba = f.readAll();
                   if (mode == QIcon::Disabled) {
-                        if (Ms::preferences.globalStyle == Ms::MuseScoreStyleType::LIGHT) {
-                              if (state == QIcon::On)
-                                    ba.replace("fill:#3b3f45", "fill:#8daac7");
-                              else
-                                    ba.replace("fill:#3b3f45", "fill:#a0a0a0");
+                        if (Ms::preferences.isThemeDark()) {
+                              if (state == QIcon::On) {
+                                    auto colorName = Ms::preferences.getColor(PREF_UI_BUTTON_HIGHLIGHT_COLOR_DISABLED_DARK_ON).name().toLatin1();
+                                    ba.replace("#3b3f45", colorName).replace("#3B3F45", colorName).replace("rgb(59,63,69)", colorName);
+                                    }
+                                    
+                              else {
+                                    auto colorName = Ms::preferences.getColor(PREF_UI_BUTTON_HIGHLIGHT_COLOR_DISABLED_DARK_OFF).name().toLatin1();
+                                    ba.replace("#3b3f45", colorName).replace("#3B3F45", colorName).replace("rgb(59,63,69)", colorName);
+                                    }
                               }
                         else {
-                              if (state == QIcon::On)
-                                    ba.replace("fill:#3b3f45", "fill:#4171a2");
-			      else
-                                    ba.replace("fill:#3b3f45", "fill:#a0a0a0");
+                              if (state == QIcon::On) {
+                                    auto colorName = Ms::preferences.getColor(PREF_UI_BUTTON_HIGHLIGHT_COLOR_DISABLED_LIGHT_ON).name().toLatin1();
+                                    ba.replace("#3b3f45", colorName).replace("#3B3F45", colorName).replace("rgb(59,63,69)", colorName);
+                                    }
+                              else {
+                                    auto colorName = Ms::preferences.getColor(PREF_UI_BUTTON_HIGHLIGHT_COLOR_DISABLED_LIGHT_OFF).name().toLatin1();
+                                    ba.replace("#3b3f45", colorName).replace("#3B3F45", colorName).replace("rgb(59,63,69)", colorName);
+                                    }
                               }
                         }
                   else {
-                        if (Ms::preferences.globalStyle == Ms::MuseScoreStyleType::LIGHT) {
-                              if (state == QIcon::On)
-                                    ba.replace("fill:#3b3f45", "fill:#4171a2");
+                        if (Ms::preferences.isThemeDark()) {
+                              if (state == QIcon::On) {
+                                    auto colorName = Ms::preferences.getColor(PREF_UI_BUTTON_HIGHLIGHT_COLOR_ENABLED_DARK_ON).name().toLatin1();
+                                    ba.replace("#3b3f45", colorName).replace("#3B3F45", colorName).replace("rgb(59,63,69)", colorName);
+                                    }
+			            else {
+                                    auto colorName = Ms::preferences.getColor(PREF_UI_BUTTON_HIGHLIGHT_COLOR_ENABLED_DARK_OFF).name().toLatin1();
+                                    ba.replace("#3b3f45", colorName).replace("#3B3F45", colorName).replace("rgb(59,63,69)", colorName);
+                                    }
                               }
                         else {
-                              if (state == QIcon::On)
-                                    ba.replace("fill:#3b3f45", "fill:#78afe6");
-			      else
-				    ba.replace("fill:#3b3f45", "fill:#eff0f1");
+                              if (state == QIcon::On) {
+                                    auto colorName = Ms::preferences.getColor(PREF_UI_BUTTON_HIGHLIGHT_COLOR_ENABLED_LIGHT_ON).name().toLatin1();
+                                    ba.replace("#3b3f45", colorName).replace("#3B3F45", colorName).replace("rgb(59,63,69)", colorName);
+                                    }
+                              else {
+                                    auto colorName = Ms::preferences.getColor(PREF_UI_BUTTON_HIGHLIGHT_COLOR_ENABLED_LIGHT_OFF).name().toLatin1();
+                                    ba.replace("#3b3f45", colorName).replace("#3B3F45", colorName).replace("rgb(59,63,69)", colorName);
+                              }
                               }
                         }
                   renderer->load(ba);
                   }
             }
       }
+
+static const QRectF getBounds(const QSize outerSize, const QSize innerSize)
+    {
+    // Horizontal Offset
+    qreal hOffset = 0.0;
+    if (innerSize.width() < outerSize.width())
+        hOffset = (outerSize.width() - innerSize.width()) * 0.5;
+
+    // Vertical Offset
+    qreal vOffset = 0.0;
+    if (innerSize.height() < outerSize.height())
+        vOffset = (outerSize.height() - innerSize.height()) * 0.5;
+
+    return QRectF(hOffset, vOffset, innerSize.width(), innerSize.height());
+    }
 
 //---------------------------------------------------------
 //   pixmap
@@ -180,10 +214,13 @@ QPixmap MIconEngine::pixmap(const QSize &size, QIcon::Mode mode, QIcon::State st
       if (!actualSize.isNull())
             actualSize.scale(size, Qt::KeepAspectRatio);
 
-      QImage img(actualSize, QImage::Format_ARGB32);
+      // Generate an image of the requested size, but render the
+      // the SVG with the correct aspect ratio centered in the image
+      // to prevent scaling issues when setting non square icon size.
+      QImage img(size, QImage::Format_ARGB32);
       img.fill(0x00000000);
       QPainter p(&img);
-      renderer.render(&p);
+      renderer.render(&p, getBounds(size, actualSize));
       p.end();
       pm = QPixmap::fromImage(img);
 
@@ -238,7 +275,10 @@ void MIconEngine::addFile(const QString &fileName, const QSize &, QIcon::Mode mo
 
 void MIconEngine::paint(QPainter *painter, const QRect &rect, QIcon::Mode mode, QIcon::State state)
       {
-      painter->drawPixmap(rect, pixmap(rect.size(), mode, state));
+      QSize pixmapSize = rect.size();
+      if (painter->device())
+          pixmapSize *= painter->device()->devicePixelRatio();
+      painter->drawPixmap(rect, pixmap(pixmapSize, mode, state));
       }
 
 //---------------------------------------------------------

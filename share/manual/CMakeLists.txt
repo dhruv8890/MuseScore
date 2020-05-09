@@ -1,7 +1,6 @@
 #=============================================================================
 #  MusE
 #  Linux Music Editor
-#  $Id:$
 #
 #  Copyright (C) 2002-2012 by Werner Schweer and others
 #
@@ -17,16 +16,6 @@
 #  along with this program; if not, write to the Free Software
 #  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 #=============================================================================
-
-install(DIRECTORY
-      plugins
-      DESTINATION ${Mscore_SHARE_NAME}${Mscore_INSTALL_NAME}manual
-      )
-
-install (DIRECTORY
-      ${PROJECT_BINARY_DIR}/share/manual/plugins
-      DESTINATION ${Mscore_SHARE_NAME}${Mscore_INSTALL_NAME}manual
-      )
 
 install(FILES
       DESTINATION ${Mscore_SHARE_NAME}${Mscore_INSTALL_NAME}manual

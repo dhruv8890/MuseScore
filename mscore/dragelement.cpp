@@ -1,7 +1,6 @@
 //=============================================================================
 //  MuseScore
 //  Music Composition & Notation
-//  $Id:$
 //
 //  Copyright (C) 2011 Werner Schweer
 //
@@ -11,6 +10,8 @@
 //  the file LICENCE.GPL
 //=============================================================================
 
+#include "log.h"
+
 #include "scoreview.h"
 #include "libmscore/score.h"
 #include "musescore.h"
@@ -18,27 +19,9 @@
 #include "libmscore/utils.h"
 #include "libmscore/undo.h"
 #include "libmscore/part.h"
+#include "tourhandler.h"
 
 namespace Ms {
-
-//---------------------------------------------------------
-//   testElementDragTransition
-//---------------------------------------------------------
-
-bool ScoreView::testElementDragTransition(QMouseEvent* ev)
-      {
-      if (curElement == 0 || !curElement->isMovable() || QApplication::mouseButtons() != Qt::LeftButton)
-            return false;
-      if (curElement->type() == Element::Type::MEASURE) {
-            System* dragSystem = (System*)(curElement->parent());
-            int staffIdx  = getStaff(dragSystem, data.startMove);
-            dragStaff = score()->staff(staffIdx);
-            if (staffIdx == 0)
-                  return false;
-            }
-      QPoint delta = ev->pos() - startMoveI;
-      return delta.manhattanLength() > 2;
-      }
 
 //---------------------------------------------------------
 //   startDrag
@@ -46,18 +29,33 @@ bool ScoreView::testElementDragTransition(QMouseEvent* ev)
 
 void ScoreView::startDrag()
       {
-      dragElement = curElement;
-      data.startMove  -= dragElement->userOff();
+      editData.grips = 0;
+      editData.clearData();
+      editData.normalizedStartMove = editData.startMove - editData.element->offset();
+
+      const Selection& sel = _score->selection();
+      const bool filterType = sel.isRange();
+      const ElementType type = editData.element->type();
+
+      const auto isDragged = [filterType, type](const Element* e) {
+            return e && e->selected() && (!filterType || type == e->type());
+            };
+
+      for (Element* e : sel.elements()) {
+            if (!isDragged(e))
+                  continue;
+
+            std::unique_ptr<ElementGroup> g = e->getDragGroup(isDragged);
+            if (g && g->enabled())
+                  dragGroups.push_back(std::move(g));
+            }
+
       _score->startCmd();
 
-      if (dragElement->type() == Element::Type::MEASURE) {
-            staffUserDist = dragStaff->userDist();
-            }
-      else {
-            foreach(Element* e, _score->selection().elements())
-                  e->setStartDragPosition(e->userOff());
-            }
-      _score->end();
+      for (auto& g : dragGroups)
+            g->startDrag(editData);
+
+      _score->selection().lock("drag");
       }
 
 //---------------------------------------------------------
@@ -66,82 +64,63 @@ void ScoreView::startDrag()
 
 void ScoreView::doDragElement(QMouseEvent* ev)
       {
-      QPointF delta = toLogical(ev->pos()) - data.startMove;
+      const QPointF logicalPos = toLogical(ev->pos());
+      QPointF delta = logicalPos - editData.normalizedStartMove;
+      QPointF evtDelta = logicalPos - editData.pos;
+
+      TourHandler::startTour("autoplace-tour");
 
       QPointF pt(delta);
-      if (qApp->keyboardModifiers() == Qt::ShiftModifier)
-            pt.setX(dragElement->userOff().x());
-      else if (qApp->keyboardModifiers() == Qt::ControlModifier)
-            pt.setY(dragElement->userOff().y());
-
-      data.hRaster = mscore->hRaster();
-      data.vRaster = mscore->vRaster();
-      data.delta   = pt;
-      data.pos     = toLogical(ev->pos());
-
-      if (dragElement->type() == Element::Type::MEASURE) {
-            if (qApp->keyboardModifiers() == Qt::ShiftModifier) {
-                  qreal dist      = dragStaff->userDist() + delta.y();
-                  int partStaves  = dragStaff->part()->nstaves();
-                  StyleIdx i      = (partStaves > 1) ? StyleIdx::akkoladeDistance : StyleIdx::staffDistance;
-                  qreal _spatium  = _score->spatium();
-                  qreal styleDist = _score->styleS(i).val() * _spatium;
-
-                  if ((dist + styleDist) < _spatium)  // limit minimum distance to spatium
-                        dist = -styleDist + _spatium;
-
-                  dragStaff->setUserDist(dist);
-                  data.startMove += delta;
-                  _score->doLayoutSystems();
-                  _score->layoutSpanner();
-                  update();
-                  loopUpdate(getAction("loop")->isChecked());
-                  }
-            return;
+      if (qApp->keyboardModifiers() == Qt::ShiftModifier) {
+            pt.setX(editData.delta.x());
+            evtDelta.setX(0.0);
+            }
+      else if (qApp->keyboardModifiers() == Qt::ControlModifier) {
+            pt.setY(editData.delta.y());
+            evtDelta.setY(0.0);
             }
 
-      // special case when dragging notes:
-      //    you usually dont want dragging stems & hooks
-      //    which would offset stems
+      editData.lastPos = editData.pos;
+      editData.hRaster = mscore->hRaster();
+      editData.vRaster = mscore->vRaster();
+      editData.delta   = pt;
+      editData.moveDelta = pt + (editData.normalizedStartMove - editData.startMove); // TODO: restructure
+      editData.evtDelta = evtDelta;
+      editData.pos     = logicalPos;
 
-      bool dragNotes = false;
-      for (Element* e : _score->selection().elements()) {
-            if (e->type() == Element::Type::NOTE) {
-                  dragNotes = true;
-                  break;
+      const Selection& sel = _score->selection();
+
+      for (auto& g : dragGroups)
+            _score->addRefresh(g->drag(editData));
+
+      _score->update();
+      QVector<QLineF> anchorLines;
+
+      for (Element* e : sel.elements()) {
+            QVector<QLineF> elAnchorLines = e->dragAnchorLines();
+            Element* const page = e->findAncestor(ElementType::PAGE);
+            const QPointF pageOffset((page ? page : e)->pos());
+
+            if (!elAnchorLines.isEmpty()) {
+                  for (QLineF& l : elAnchorLines)
+                        l.translate(pageOffset);
+                  anchorLines.append(elAnchorLines);
                   }
             }
 
-      QList<Element*> el;
-      for (Element* e : _score->selection().elements()) {
-            if (dragNotes) {
-                  if (e->type() == Element::Type::STEM || e->type() == Element::Type::HOOK)
-                        continue;
-                  }
-            el.append(e);
-            }
-
-      for (Element* e : el) {
-            QRectF r = e->drag(&data);
-            _score->addRefresh(r);
-            }
-
-      if (_score->playNote()) {
-            Element* e = _score->selection().element();
-            if (e)
-                  mscore->play(e);
-            _score->setPlayNote(false);
-            }
+      if (anchorLines.isEmpty())
+            setDropTarget(0); // this also resets dropAnchor
+      else
+            setDropAnchorLines(anchorLines);
 
       Element* e = _score->getSelectedElement();
       if (e) {
-            QLineF anchor = e->dragAnchor();
-
-            if (!anchor.isNull())
-                  setDropAnchor(anchor);
-            else
-                  setDropTarget(0); // this also resets dropAnchor
+            if (_score->playNote()) {
+                  mscore->play(e);
+                  _score->setPlayNote(false);
+                  }
             }
+      updateGrips();
       _score->update();
       }
 
@@ -151,21 +130,16 @@ void ScoreView::doDragElement(QMouseEvent* ev)
 
 void ScoreView::endDrag()
       {
-      if (dragElement->type() == Element::Type::MEASURE) {
-            qreal userDist = dragStaff->userDist();
-            dragStaff->setUserDist(staffUserDist);
-            score()->undo(new ChangeStaffUserDist(dragStaff, userDist));
-            }
-      else {
-            foreach(Element* e, _score->selection().elements()) {
-                  e->endDrag();
-                  e->score()->undoPropertyChanged(e, P_ID::USER_OFF, e->startDragPosition());
-                  }
-            }
-      _score->setLayoutAll(true);
-      dragElement = 0;
+      for (auto& g : dragGroups)
+            g->endDrag(editData);
+
+      dragGroups.clear();
+      _score->selection().unlock("drag");
       setDropTarget(0); // this also resets dropAnchor
       _score->endCmd();
+      updateGrips();
+      if (editData.element->normalModeEditBehavior() == Element::EditBehavior::Edit && _score->selection().element() == editData.element)
+            startEdit(/* editMode */ false);
       }
 }
 

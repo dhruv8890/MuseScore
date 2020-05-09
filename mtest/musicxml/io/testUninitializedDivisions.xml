@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 3.0 Partwise//EN" "http://www.musicxml.org/dtds/partwise.dtd">
-<score-partwise>
+<!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 3.1 Partwise//EN" "http://www.musicxml.org/dtds/partwise.dtd">
+<score-partwise version="3.1">
   <work>
     <work-number>MuseScore testfile</work-number>
     <work-title>Uninitialized divisions at start of file</work-title>
@@ -20,8 +20,8 @@
       <miscellaneous-field name="description">
         Test a file where divisions is initialized too late: in measure 2.
         Neuratron PhotoScore generates this, making it impossible to calculate
-        the duration of the rest in the first measure. This rest will be ignored
-        on initial import, leading to a measure containing only a hidden rest.
+        the duration of the rest in the first measure (based on divisions).
+        The note type and dots will be used to calculate the duration.
         Attributes divisions, key and clef will be moved to measure 1.
         </miscellaneous-field>
       </miscellaneous>

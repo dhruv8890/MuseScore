@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>629</width>
-    <height>595</height>
+    <width>662</width>
+    <height>605</height>
    </rect>
   </property>
   <property name="minimumSize">
@@ -17,7 +17,7 @@
    </size>
   </property>
   <property name="windowTitle">
-   <string>MuseScore: Edit Staff Type</string>
+   <string>Edit Staff Type</string>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout_4">
    <item>
@@ -104,9 +104,6 @@
          <property name="text">
           <string>Lines:</string>
          </property>
-         <property name="margin">
-          <number>5</number>
-         </property>
          <property name="buddy">
           <cstring>lines</cstring>
          </property>
@@ -141,12 +138,6 @@
          </property>
          <property name="text">
           <string>Line distance:</string>
-         </property>
-         <property name="alignment">
-          <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-         </property>
-         <property name="margin">
-          <number>5</number>
          </property>
          <property name="buddy">
           <cstring>lineDistance</cstring>
@@ -227,7 +218,7 @@
         <number>0</number>
        </property>
        <widget class="QWidget" name="page">
-        <layout class="QVBoxLayout" name="verticalLayout_7" stretch="0,0">
+        <layout class="QVBoxLayout" name="verticalLayout_7" stretch="0,0,0">
          <property name="spacing">
           <number>5</number>
          </property>
@@ -266,7 +257,63 @@
              </property>
             </widget>
            </item>
+           <item row="3" column="1">
+            <widget class="QComboBox" name="noteHeadScheme"/>
+           </item>
+           <item row="3" column="0">
+            <widget class="QLabel" name="label">
+             <property name="text">
+              <string>Notehead scheme:</string>
+             </property>
+            </widget>
+           </item>
           </layout>
+         </item>
+         <item>
+          <widget class="QGroupBox" name="groupPreviewStandard">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Expanding" vsizetype="Minimum">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="minimumSize">
+            <size>
+             <width>0</width>
+             <height>150</height>
+            </size>
+           </property>
+           <property name="title">
+            <string>Preview</string>
+           </property>
+           <layout class="QVBoxLayout" name="verticalLayout_49">
+            <property name="leftMargin">
+             <number>0</number>
+            </property>
+            <property name="topMargin">
+             <number>0</number>
+            </property>
+            <property name="rightMargin">
+             <number>0</number>
+            </property>
+            <property name="bottomMargin">
+             <number>0</number>
+            </property>
+            <item>
+             <widget class="Ms::ExampleView" name="standardPreview" native="true">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Expanding" vsizetype="Minimum">
+                <horstretch>0</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
+              </property>
+              <property name="lineWidth" stdset="0">
+               <number>2</number>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </widget>
          </item>
          <item>
           <spacer name="verticalSpacer_2">
@@ -305,7 +352,7 @@
            <item row="0" column="0">
             <widget class="QCheckBox" name="genKeysigPercussion">
              <property name="text">
-              <string>Show Key signature</string>
+              <string>Show key signature</string>
              </property>
             </widget>
            </item>
@@ -394,9 +441,6 @@
                       <property name="text">
                        <string>Font:</string>
                       </property>
-                      <property name="textFormat">
-                       <enum>Qt::PlainText</enum>
-                      </property>
                       <property name="buddy">
                        <cstring>fretFontName</cstring>
                       </property>
@@ -413,12 +457,6 @@
                      <widget class="QLabel" name="fretFontSizeLabel">
                       <property name="text">
                        <string>Size:</string>
-                      </property>
-                      <property name="textFormat">
-                       <enum>Qt::PlainText</enum>
-                      </property>
-                      <property name="alignment">
-                       <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
                       </property>
                       <property name="buddy">
                        <cstring>fretFontSize</cstring>
@@ -449,12 +487,6 @@
                      <widget class="QLabel" name="fretYLabel">
                       <property name="text">
                        <string>Vertical offset:</string>
-                      </property>
-                      <property name="textFormat">
-                       <enum>Qt::PlainText</enum>
-                      </property>
-                      <property name="alignment">
-                       <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
                       </property>
                       <property name="buddy">
                        <cstring>fretY</cstring>
@@ -651,6 +683,13 @@
                    </widget>
                   </item>
                   <item>
+                   <widget class="QCheckBox" name="showTabFingering">
+                    <property name="text">
+                     <string>Show fingering in tablature</string>
+                    </property>
+                   </widget>
+                  </item>
+                  <item>
                    <spacer name="horizontalSpacer_6">
                     <property name="orientation">
                      <enum>Qt::Horizontal</enum>
@@ -805,7 +844,7 @@
                       </size>
                      </property>
                      <property name="text">
-                      <string>None</string>
+                      <string comment="neither note symbols nor stems and beams">None</string>
                      </property>
                     </widget>
                    </item>
@@ -876,9 +915,6 @@
                      </property>
                      <property name="text">
                       <string>Repeat:</string>
-                     </property>
-                     <property name="textFormat">
-                      <enum>Qt::PlainText</enum>
                      </property>
                      <property name="buddy">
                       <cstring>valuesRepeatNever</cstring>
@@ -979,9 +1015,6 @@
                      <property name="text">
                       <string>Stem style:</string>
                      </property>
-                     <property name="textFormat">
-                      <enum>Qt::PlainText</enum>
-                     </property>
                      <property name="buddy">
                       <cstring>stemBesideRadio</cstring>
                      </property>
@@ -1054,9 +1087,6 @@
                      </property>
                      <property name="text">
                       <string>Stem position:</string>
-                     </property>
-                     <property name="textFormat">
-                      <enum>Qt::PlainText</enum>
                      </property>
                      <property name="buddy">
                       <cstring>stemAboveRadio</cstring>
@@ -1131,9 +1161,6 @@
                      <property name="text">
                       <string>Half notes:</string>
                      </property>
-                     <property name="textFormat">
-                      <enum>Qt::PlainText</enum>
-                     </property>
                      <property name="buddy">
                       <cstring>minimNoneRadio</cstring>
                      </property>
@@ -1151,7 +1178,7 @@
                       </size>
                      </property>
                      <property name="text">
-                      <string>None</string>
+                      <string comment="neither short nor slashed stem">None</string>
                      </property>
                     </widget>
                    </item>
@@ -1234,7 +1261,7 @@
          <item>
           <widget class="QGroupBox" name="groupPreview">
            <property name="sizePolicy">
-            <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+            <sizepolicy hsizetype="Expanding" vsizetype="Minimum">
              <horstretch>0</horstretch>
              <verstretch>0</verstretch>
             </sizepolicy>
@@ -1242,15 +1269,37 @@
            <property name="minimumSize">
             <size>
              <width>0</width>
-             <height>80</height>
+             <height>170</height>
             </size>
            </property>
            <property name="title">
             <string>Preview</string>
            </property>
            <layout class="QVBoxLayout" name="verticalLayout_9">
+            <property name="leftMargin">
+             <number>0</number>
+            </property>
+            <property name="topMargin">
+             <number>0</number>
+            </property>
+            <property name="rightMargin">
+             <number>0</number>
+            </property>
+            <property name="bottomMargin">
+             <number>0</number>
+            </property>
             <item>
-             <widget class="Ms::ScoreView" name="preview" native="true"/>
+             <widget class="Ms::ExampleView" name="tabPreview" native="true">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Expanding" vsizetype="Minimum">
+                <horstretch>0</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
+              </property>
+              <property name="lineWidth" stdset="0">
+               <number>2</number>
+              </property>
+             </widget>
             </item>
            </layout>
           </widget>
@@ -1345,9 +1394,9 @@
  </widget>
  <customwidgets>
   <customwidget>
-   <class>Ms::ScoreView</class>
+   <class>Ms::ExampleView</class>
    <extends>QWidget</extends>
-   <header>scoreview.h</header>
+   <header>exampleview.h</header>
    <container>1</container>
   </customwidget>
  </customwidgets>
@@ -1361,6 +1410,7 @@
   <tabstop>genKeysigPitched</tabstop>
   <tabstop>showLedgerLinesPitched</tabstop>
   <tabstop>stemlessPitched</tabstop>
+  <tabstop>noteHeadScheme</tabstop>
   <tabstop>genKeysigPercussion</tabstop>
   <tabstop>showLedgerLinesPercussion</tabstop>
   <tabstop>stemlessPercussion</tabstop>
@@ -1376,6 +1426,7 @@
   <tabstop>linesThroughRadio</tabstop>
   <tabstop>linesBrokenRadio</tabstop>
   <tabstop>showBackTied</tabstop>
+  <tabstop>showTabFingering</tabstop>
   <tabstop>durFontName</tabstop>
   <tabstop>durFontSize</tabstop>
   <tabstop>durY</tabstop>
@@ -1434,8 +1485,8 @@
   </connection>
  </connections>
  <buttongroups>
-  <buttongroup name="OnAboveLinesButtGroup"/>
   <buttongroup name="NumLettersButtGroup"/>
+  <buttongroup name="OnAboveLinesButtGroup"/>
   <buttongroup name="ContinuousBrokenLinesbuttGroup"/>
  </buttongroups>
 </ui>

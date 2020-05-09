@@ -1,7 +1,6 @@
 //=============================================================================
 //  MusE Score
 //  Linux Music Score Editor
-//  $Id: tuplet.h -1   $
 //
 //  Copyright (C) 2002-2009 Werner Schweer and others
 //
@@ -33,8 +32,10 @@ namespace Ms {
 class TupletDialog : public QDialog, Ui::TupletDialog {
       Q_OBJECT
 
+      virtual void hideEvent(QHideEvent*);
    public:
       TupletDialog(QWidget* parent = 0);
+      void defaultToStyleSettings(Score* score);
       void setupTuplet(Tuplet* tuplet);
       int getNormalNotes() const { return normalNotes->value(); }
       };

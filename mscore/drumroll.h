@@ -1,7 +1,6 @@
 //=============================================================================
 //  MusE Score
 //  Linux Music Score Editor
-//  $Id:$
 //
 //  Copyright (C) 2010 Werner Schweer and others
 //
@@ -57,6 +56,7 @@ class DrumrollEditor : public QMainWindow {
 
       void updateVelocity(Note* note);
       void updateSelection();
+      void readSettings();
 
    private slots:
       void selectionChanged();

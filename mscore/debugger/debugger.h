@@ -1,9 +1,8 @@
 //=============================================================================
 //  MuseScore
 //  Linux Music Score Editor
-//  $Id: debugger.h 5383 2012-02-27 07:38:15Z wschweer $
 //
-//  Copyright (C) 2002-2011 Werner Schweer and others
+//  Copyright (C) 2002-2016 Werner Schweer and others
 //
 //  This program is free software; you can redistribute it and/or modify
 //  it under the terms of the GNU General Public License version 2.
@@ -44,6 +43,7 @@
 #include "ui_tremolo.h"
 #include "ui_spanner.h"
 #include "ui_slursegment.h"
+#include "ui_tiesegment.h"
 #include "ui_accidental.h"
 #include "ui_clef.h"
 #include "ui_articulationbase.h"
@@ -55,10 +55,12 @@
 #include "ui_spanner.h"
 #include "ui_system.h"
 #include "ui_timesig.h"
+#include "ui_bracket.h"
 
 #include "globals.h"
 #include "libmscore/element.h"
 #include "libmscore/mscore.h"
+#include "abstractdialog.h"
 
 namespace Ms {
 
@@ -76,22 +78,24 @@ class ShowNoteWidget;
 //   Debugger
 //---------------------------------------------------------
 
-class Debugger : public QDialog, public Ui::DebuggerBase {
-      Q_OBJECT;
+class Debugger : public AbstractDialog, public Ui::DebuggerBase {
+      Q_OBJECT
 
       QStack<Element*>backStack;
       QStack<Element*>forwardStack;
 
-      ShowElementBase* elementViews[int(Element::Type::MAXTYPE)];
+      ShowElementBase* elementViews[int(ElementType::MAXTYPE)];
 
       bool searchElement(QTreeWidgetItem* pi, Element* el);
       void updateElement(Element*);
       virtual void showEvent(QShowEvent*);
       void addMeasure(ElementItem* mi, Measure* measure);
+      void readSettings();
 
    protected:
       Score* cs;
       Element* curElement;
+      virtual void retranslate() { retranslateUi(this); }
 
    private slots:
       void itemClicked(QTreeWidgetItem*, int);
@@ -118,7 +122,7 @@ class Debugger : public QDialog, public Ui::DebuggerBase {
 //---------------------------------------------------------
 
 class MeasureListEditor : public QWidget {
-      Q_OBJECT;
+      Q_OBJECT
 
    private slots:
       // void itemChanged(QListViewItem*);
@@ -132,7 +136,7 @@ class MeasureListEditor : public QWidget {
 //---------------------------------------------------------
 
 class ShowElementBase : public QWidget {
-      Q_OBJECT;
+      Q_OBJECT
 
       Ui::ElementBase eb;
       Element* el;
@@ -169,7 +173,7 @@ class ShowElementBase : public QWidget {
 //---------------------------------------------------------
 
 class ShowPageWidget : public ShowElementBase {
-      Q_OBJECT;
+      Q_OBJECT
 
       Ui::PageBase pb;
 
@@ -186,7 +190,7 @@ class ShowPageWidget : public ShowElementBase {
 //---------------------------------------------------------
 
 class MeasureView : public ShowElementBase {
-      Q_OBJECT;
+      Q_OBJECT
 
       Ui::MeasureBase mb;
 
@@ -206,7 +210,7 @@ class MeasureView : public ShowElementBase {
 //---------------------------------------------------------
 
 class ChordDebug : public ShowElementBase {
-      Q_OBJECT;
+      Q_OBJECT
       Ui::ChordRestBase crb;
       Ui::ChordBase cb;
 
@@ -233,7 +237,7 @@ class ChordDebug : public ShowElementBase {
 //---------------------------------------------------------
 
 class SegmentView : public ShowElementBase {
-      Q_OBJECT;
+      Q_OBJECT
       Ui::SegmentBase sb;
 
    public:
@@ -246,7 +250,7 @@ class SegmentView : public ShowElementBase {
 //---------------------------------------------------------
 
 class ShowNoteWidget : public ShowElementBase {
-      Q_OBJECT;
+      Q_OBJECT
 
       Ui::NoteBase nb;
 
@@ -257,6 +261,7 @@ class ShowNoteWidget : public ShowElementBase {
       void dot1Clicked();
       void dot2Clicked();
       void dot3Clicked();
+      void dot4Clicked();
 
    signals:
       void scoreChanged();
@@ -271,12 +276,16 @@ class ShowNoteWidget : public ShowElementBase {
 //---------------------------------------------------------
 
 class RestView : public ShowElementBase {
-      Q_OBJECT;
+      Q_OBJECT
 
       Ui::ChordRestBase crb;
       Ui::Rest rb;
 
    private slots:
+      void dot1Clicked();
+      void dot2Clicked();
+      void dot3Clicked();
+      void dot4Clicked();
       void tupletClicked();
       void beamClicked();
 
@@ -290,7 +299,7 @@ class RestView : public ShowElementBase {
 //---------------------------------------------------------
 
 class TextView : public ShowElementBase {
-      Q_OBJECT;
+      Q_OBJECT
 
       Ui::TextBase tb;
 
@@ -310,7 +319,7 @@ class TextView : public ShowElementBase {
 //---------------------------------------------------------
 
 class HarmonyView : public ShowElementBase {
-      Q_OBJECT;
+      Q_OBJECT
 
       Ui::TextBase tb;
       Ui::HarmonyBase hb;
@@ -328,7 +337,7 @@ class HarmonyView : public ShowElementBase {
 //---------------------------------------------------------
 
 class SpannerView : public ShowElementBase {
-      Q_OBJECT;
+      Q_OBJECT
 
       Ui::SpannerBase sp;
 
@@ -346,7 +355,7 @@ class SpannerView : public ShowElementBase {
 //---------------------------------------------------------
 
 class HairpinView : public SpannerView {
-      Q_OBJECT;
+      Q_OBJECT
 
       Ui::HairpinBase hp;
       Ui::SLineBase sl;
@@ -363,7 +372,7 @@ class HairpinView : public SpannerView {
 //---------------------------------------------------------
 
 class ElementView : public ShowElementBase {
-      Q_OBJECT;
+      Q_OBJECT
 
    public:
       ElementView();
@@ -374,7 +383,7 @@ class ElementView : public ShowElementBase {
 //---------------------------------------------------------
 
 class BarLineView : public ShowElementBase {
-      Q_OBJECT;
+      Q_OBJECT
 
       Ui::BarLineBase bl;
 
@@ -388,7 +397,7 @@ class BarLineView : public ShowElementBase {
 //---------------------------------------------------------
 
 class DynamicView : public ShowElementBase {
-      Q_OBJECT;
+      Q_OBJECT
 
       Ui::TextBase tb;
       Ui::DynamicBase bl;
@@ -403,7 +412,7 @@ class DynamicView : public ShowElementBase {
 //---------------------------------------------------------
 
 class TupletView : public ShowElementBase {
-      Q_OBJECT;
+      Q_OBJECT
 
       Ui::TupletBase tb;
 
@@ -426,7 +435,7 @@ class TupletView : public ShowElementBase {
 //---------------------------------------------------------
 
 class DoubleLabel : public QLabel {
-      Q_OBJECT;
+      Q_OBJECT
 
    public:
       DoubleLabel(QWidget* parent);
@@ -439,7 +448,7 @@ class DoubleLabel : public QLabel {
 //---------------------------------------------------------
 
 class SlurTieView : public SpannerView {
-      Q_OBJECT;
+      Q_OBJECT
 
       Ui::SlurTieBase st;
 
@@ -456,7 +465,7 @@ class SlurTieView : public SpannerView {
 //---------------------------------------------------------
 
 class TieView : public SlurTieView {
-      Q_OBJECT;
+      Q_OBJECT
 
       Ui::TieBase tb;
 
@@ -474,7 +483,7 @@ class TieView : public SlurTieView {
 //---------------------------------------------------------
 
 class VoltaView : public ShowElementBase {
-      Q_OBJECT;
+      Q_OBJECT
 
       Ui::TextLineBase tlb;
       Ui::SLineBase lb;
@@ -498,7 +507,7 @@ class VoltaView : public ShowElementBase {
 //---------------------------------------------------------
 
 class VoltaSegmentView : public ShowElementBase {
-      Q_OBJECT;
+      Q_OBJECT
 
       Ui::LineSegmentBase lb;
 
@@ -515,7 +524,7 @@ class VoltaSegmentView : public ShowElementBase {
 //---------------------------------------------------------
 
 class TextLineView : public SpannerView {
-      Q_OBJECT;
+      Q_OBJECT
 
       Ui::TextLineBase tlb;
       Ui::SLineBase lb;
@@ -535,7 +544,7 @@ class TextLineView : public SpannerView {
 //---------------------------------------------------------
 
 class TextLineSegmentView : public ShowElementBase {
-      Q_OBJECT;
+      Q_OBJECT
 
       Ui::LineSegmentBase lb;
 
@@ -552,7 +561,7 @@ class TextLineSegmentView : public ShowElementBase {
 //---------------------------------------------------------
 
 class LineSegmentView : public ShowElementBase {
-      Q_OBJECT;
+      Q_OBJECT
 
       Ui::LineSegmentBase lb;
 
@@ -569,7 +578,7 @@ class LineSegmentView : public ShowElementBase {
 //---------------------------------------------------------
 
 class LyricsView : public ShowElementBase {
-      Q_OBJECT;
+      Q_OBJECT
 
       Ui::LyricsBase lb;
 
@@ -583,7 +592,7 @@ class LyricsView : public ShowElementBase {
 //---------------------------------------------------------
 
 class BeamView : public ShowElementBase {
-      Q_OBJECT;
+      Q_OBJECT
 
       Ui::BeamBase bb;
 
@@ -600,7 +609,7 @@ class BeamView : public ShowElementBase {
 //---------------------------------------------------------
 
 class TremoloView : public ShowElementBase {
-      Q_OBJECT;
+      Q_OBJECT
 
       Ui::TremoloBase tb;
 
@@ -618,7 +627,7 @@ class TremoloView : public ShowElementBase {
 //---------------------------------------------------------
 
 class OttavaView : public TextLineView {
-      Q_OBJECT;
+      Q_OBJECT
 
 //      Ui::OttavaBase ob;
 
@@ -634,7 +643,7 @@ class OttavaView : public TextLineView {
 //---------------------------------------------------------
 
 class SlurSegmentView : public ShowElementBase {
-      Q_OBJECT;
+      Q_OBJECT
 
       Ui::SlurSegment ss;
 
@@ -647,11 +656,28 @@ class SlurSegmentView : public ShowElementBase {
       };
 
 //---------------------------------------------------------
+//   TieSegmentView
+//---------------------------------------------------------
+
+class TieSegmentView : public ShowElementBase {
+      Q_OBJECT
+
+      Ui::TieSegment ss;
+
+   private slots:
+      void slurTieClicked();
+
+   public:
+      TieSegmentView();
+      virtual void setElement(Element*);
+      };
+
+//---------------------------------------------------------
 //   AccidentalView
 //---------------------------------------------------------
 
 class AccidentalView : public ShowElementBase {
-      Q_OBJECT;
+      Q_OBJECT
 
       Ui::Accidental acc;
 
@@ -665,7 +691,7 @@ class AccidentalView : public ShowElementBase {
 //---------------------------------------------------------
 
 class ClefView : public ShowElementBase {
-      Q_OBJECT;
+      Q_OBJECT
 
       Ui::Clef clef;
 
@@ -679,7 +705,7 @@ class ClefView : public ShowElementBase {
 //---------------------------------------------------------
 
 class ArticulationView : public ShowElementBase {
-      Q_OBJECT;
+      Q_OBJECT
 
       Ui::ArticulationBase articulation;
 
@@ -693,7 +719,7 @@ class ArticulationView : public ShowElementBase {
 //---------------------------------------------------------
 
 class KeySigView : public ShowElementBase {
-      Q_OBJECT;
+      Q_OBJECT
 
       Ui::KeySig keysig;
 
@@ -707,7 +733,7 @@ class KeySigView : public ShowElementBase {
 //---------------------------------------------------------
 
 class StemView : public ShowElementBase {
-      Q_OBJECT;
+      Q_OBJECT
 
       Ui::StemBase stem;
 
@@ -721,7 +747,7 @@ class StemView : public ShowElementBase {
 //---------------------------------------------------------
 
 class BoxView : public ShowElementBase {
-      Q_OBJECT;
+      Q_OBJECT
 
       Ui::BoxBase box;
 
@@ -735,7 +761,7 @@ class BoxView : public ShowElementBase {
 //---------------------------------------------------------
 
 class SystemView : public ShowElementBase {
-      Q_OBJECT;
+      Q_OBJECT
 
       Ui::SystemBase mb;
 
@@ -753,7 +779,7 @@ class SystemView : public ShowElementBase {
 //---------------------------------------------------------
 
 class TimeSigView : public ShowElementBase {
-      Q_OBJECT;
+      Q_OBJECT
 
       Ui::TimeSig tb;
 
@@ -761,6 +787,21 @@ class TimeSigView : public ShowElementBase {
       TimeSigView();
       virtual void setElement(Element*);
       };
+
+//---------------------------------------------------------
+//   BracketView
+//---------------------------------------------------------
+
+class BracketView : public ShowElementBase {
+      Q_OBJECT
+
+      Ui::Bracket br;
+
+   public:
+      BracketView();
+      virtual void setElement(Element*);
+      };
+
 
 } // namespace Ms
 #endif

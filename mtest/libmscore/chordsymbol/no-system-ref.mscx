@@ -1,36 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<museScore version="2.00">
+<museScore version="3.01">
   <Score>
     <LayerTag id="0" tag="default"></LayerTag>
     <currentLayer>0</currentLayer>
     <Division>480</Division>
     <Style>
-      <TextStyle>
-        <halign>left</halign>
-        <valign>baseline</valign>
-        <offsetType>spatium</offsetType>
-        <name>Chord Symbol</name>
-        <family>FreeSerif</family>
-        <size>12</size>
-        <sizeIsSpatiumDependent>1</sizeIsSpatiumDependent>
-        <systemFlag>1</systemFlag>
-        </TextStyle>
-      <page-layout>
-        <page-height>1584</page-height>
-        <page-width>1224</page-width>
-        <page-margins type="even">
-          <left-margin>56.6929</left-margin>
-          <right-margin>90.1417</right-margin>
-          <top-margin>56.6929</top-margin>
-          <bottom-margin>113.386</bottom-margin>
-          </page-margins>
-        <page-margins type="odd">
-          <left-margin>56.6929</left-margin>
-          <right-margin>90.1417</right-margin>
-          <top-margin>56.6929</top-margin>
-          <bottom-margin>113.386</bottom-margin>
-          </page-margins>
-        </page-layout>
       <Spatium>1.76389</Spatium>
       </Style>
     <showInvisible>1</showInvisible>
@@ -48,20 +22,11 @@
     <metaTag name="translator"></metaTag>
     <metaTag name="workNumber"></metaTag>
     <metaTag name="workTitle"></metaTag>
-    <PageList>
-      <Page>
-        <System>
-          </System>
-        <System>
-          </System>
-        </Page>
-      </PageList>
     <Part>
       <Staff id="1">
         <StaffType group="pitched">
           <name>Standard</name>
           </StaffType>
-        <bracket type="-1" span="0"/>
         </Staff>
       <trackName>Flute</trackName>
       <Instrument>
@@ -98,7 +63,6 @@
         <StaffType group="pitched">
           <name>Standard</name>
           </StaffType>
-        <bracket type="-1" span="0"/>
         </Staff>
       <trackName>Alto Saxophone</trackName>
       <Instrument>
@@ -130,108 +94,107 @@
         <Channel>
           <program value="65"/>
           </Channel>
+        <Channel name="Chord symbols">
+          <program value="65"/>
+          </Channel>
         </Instrument>
       </Part>
     <Staff id="1">
       <VBox>
         <height>10</height>
-        <lid>10</lid>
+        <linkedMain/>
         </VBox>
-      <Measure number="1">
-        <Clef>
-          <concertClefType>G</concertClefType>
-          <transposingClefType>G</transposingClefType>
-          <lid>0</lid>
-          </Clef>
-        <TimeSig>
-          <lid>1</lid>
-          <sigN>4</sigN>
-          <sigD>4</sigD>
-          <showCourtesySig>1</showCourtesySig>
-          </TimeSig>
-        <Chord>
-          <lid>2</lid>
-          <durationType>quarter</durationType>
-          <Note>
-            <lid>3</lid>
-            <pitch>72</pitch>
-            <tpc>14</tpc>
-            </Note>
-          </Chord>
-        <Rest>
-          <lid>4</lid>
-          <durationType>quarter</durationType>
-          </Rest>
-        <Rest>
-          <lid>5</lid>
-          <durationType>half</durationType>
-          </Rest>
+      <Measure>
+        <voice>
+          <Clef>
+            <concertClefType>G</concertClefType>
+            <transposingClefType>G</transposingClefType>
+            <linkedMain/>
+            </Clef>
+          <TimeSig>
+            <linkedMain/>
+            <sigN>4</sigN>
+            <sigD>4</sigD>
+            </TimeSig>
+          <Chord>
+            <linkedMain/>
+            <durationType>quarter</durationType>
+            <Note>
+              <linkedMain/>
+              <pitch>72</pitch>
+              <tpc>14</tpc>
+              </Note>
+            </Chord>
+          <Rest>
+            <linkedMain/>
+            <durationType>quarter</durationType>
+            </Rest>
+          <Rest>
+            <linkedMain/>
+            <durationType>half</durationType>
+            </Rest>
+          </voice>
         </Measure>
-      <Measure number="2">
-        <Rest>
-          <lid>7</lid>
-          <durationType>measure</durationType>
-          <duration z="4" n="4"/>
-          </Rest>
-        <BarLine>
-          <subtype>end</subtype>
-          <span>1</span>
-          <lid>8</lid>
-          </BarLine>
+      <Measure>
+        <voice>
+          <Rest>
+            <linkedMain/>
+            <durationType>measure</durationType>
+            <duration>4/4</duration>
+            </Rest>
+          </voice>
         </Measure>
       </Staff>
     <Staff id="2">
-      <Measure number="1">
-        <Clef>
-          <concertClefType>G</concertClefType>
-          <transposingClefType>G</transposingClefType>
-          <lid>11</lid>
-          </Clef>
-        <KeySig>
-          <lid>12</lid>
-          <accidental>3</accidental>
-          </KeySig>
-        <TimeSig>
-          <lid>13</lid>
-          <sigN>4</sigN>
-          <sigD>4</sigD>
-          <showCourtesySig>1</showCourtesySig>
-          </TimeSig>
-        <Harmony>
-          <root>17</root>
-          <name>7</name>
-          <lid>14</lid>
-          </Harmony>
-        <Chord>
-          <lid>15</lid>
-          <durationType>quarter</durationType>
-          <Note>
-            <lid>16</lid>
-            <pitch>60</pitch>
-            <tpc>14</tpc>
-            <tpc2>17</tpc2>
-            </Note>
-          </Chord>
-        <Rest>
-          <lid>17</lid>
-          <durationType>quarter</durationType>
-          </Rest>
-        <Rest>
-          <lid>18</lid>
-          <durationType>half</durationType>
-          </Rest>
+      <Measure>
+        <voice>
+          <Clef>
+            <concertClefType>G</concertClefType>
+            <transposingClefType>G</transposingClefType>
+            <linkedMain/>
+            </Clef>
+          <KeySig>
+            <linkedMain/>
+            <accidental>3</accidental>
+            </KeySig>
+          <TimeSig>
+            <linkedMain/>
+            <sigN>4</sigN>
+            <sigD>4</sigD>
+            </TimeSig>
+          <Harmony>
+            <root>17</root>
+            <name>7</name>
+            <linkedMain/>
+            </Harmony>
+          <Chord>
+            <linkedMain/>
+            <durationType>quarter</durationType>
+            <Note>
+              <linkedMain/>
+              <pitch>60</pitch>
+              <tpc>14</tpc>
+              <tpc2>17</tpc2>
+              </Note>
+            </Chord>
+          <Rest>
+            <linkedMain/>
+            <durationType>quarter</durationType>
+            </Rest>
+          <Rest>
+            <linkedMain/>
+            <durationType>half</durationType>
+            </Rest>
+          </voice>
         </Measure>
-      <Measure number="2">
-        <Rest>
-          <lid>19</lid>
-          <durationType>measure</durationType>
-          <duration z="4" n="4"/>
-          </Rest>
-        <BarLine>
-          <subtype>end</subtype>
-          <span>1</span>
-          <lid>20</lid>
-          </BarLine>
+      <Measure>
+        <voice>
+          <Rest>
+            <linkedMain/>
+            <durationType>measure</durationType>
+            <duration>4/4</duration>
+            </Rest>
+          </voice>
         </Measure>
       </Staff>
     <Score>
@@ -240,32 +203,6 @@
       <Division>480</Division>
       <Style>
         <createMultiMeasureRests>1</createMultiMeasureRests>
-        <TextStyle>
-          <halign>left</halign>
-          <valign>baseline</valign>
-          <offsetType>spatium</offsetType>
-          <name>Chord Symbol</name>
-          <family>FreeSerif</family>
-          <size>12</size>
-          <sizeIsSpatiumDependent>1</sizeIsSpatiumDependent>
-          <systemFlag>1</systemFlag>
-          </TextStyle>
-        <page-layout>
-          <page-height>1683.78</page-height>
-          <page-width>1190.55</page-width>
-          <page-margins type="even">
-            <left-margin>56.6929</left-margin>
-            <right-margin>56.6929</right-margin>
-            <top-margin>56.6929</top-margin>
-            <bottom-margin>113.386</bottom-margin>
-            </page-margins>
-          <page-margins type="odd">
-            <left-margin>56.6929</left-margin>
-            <right-margin>56.6929</right-margin>
-            <top-margin>56.6929</top-margin>
-            <bottom-margin>113.386</bottom-margin>
-            </page-margins>
-          </page-layout>
         <Spatium>1.76389</Spatium>
         </Style>
       <showInvisible>1</showInvisible>
@@ -273,23 +210,14 @@
       <showFrames>1</showFrames>
       <showMargins>0</showMargins>
       <metaTag name="partName">Flute</metaTag>
-      <PageList>
-        <Page>
-          <System>
-            </System>
-          <System>
-            </System>
-          </Page>
-        </PageList>
       <Part>
         <Staff id="1">
           <linkedTo>1</linkedTo>
           <StaffType group="pitched">
             <name>Standard</name>
             </StaffType>
-          <bracket type="-1" span="0"/>
           </Staff>
-        <trackName></trackName>
+        <trackName>Flute</trackName>
         <Instrument>
           <longName>Flute</longName>
           <shortName>Fl.</shortName>
@@ -322,53 +250,59 @@
       <Staff id="1">
         <VBox>
           <height>10</height>
-          <lid>10</lid>
+          <linked>
+            </linked>
           <Text>
             <style>Instrument Name (Part)</style>
             <text>Flute</text>
             </Text>
           </VBox>
-        <Measure number="1">
-          <Clef>
-            <concertClefType>G</concertClefType>
-            <transposingClefType>G</transposingClefType>
-            <lid>0</lid>
-            </Clef>
-          <TimeSig>
-            <lid>1</lid>
-            <sigN>4</sigN>
-            <sigD>4</sigD>
-            <showCourtesySig>1</showCourtesySig>
-            </TimeSig>
-          <Chord>
-            <lid>2</lid>
-            <durationType>quarter</durationType>
-            <Note>
-              <lid>3</lid>
-              <pitch>72</pitch>
-              <tpc>14</tpc>
-              </Note>
-            </Chord>
-          <Rest>
-            <lid>4</lid>
-            <durationType>quarter</durationType>
-            </Rest>
-          <Rest>
-            <lid>5</lid>
-            <durationType>half</durationType>
-            </Rest>
+        <Measure>
+          <voice>
+            <Clef>
+              <concertClefType>G</concertClefType>
+              <transposingClefType>G</transposingClefType>
+              <linked>
+                </linked>
+              </Clef>
+            <TimeSig>
+              <linked>
+                </linked>
+              <sigN>4</sigN>
+              <sigD>4</sigD>
+              </TimeSig>
+            <Chord>
+              <linked>
+                </linked>
+              <durationType>quarter</durationType>
+              <Note>
+                <linked>
+                  </linked>
+                <pitch>72</pitch>
+                <tpc>14</tpc>
+                </Note>
+              </Chord>
+            <Rest>
+              <linked>
+                </linked>
+              <durationType>quarter</durationType>
+              </Rest>
+            <Rest>
+              <linked>
+                </linked>
+              <durationType>half</durationType>
+              </Rest>
+            </voice>
           </Measure>
-        <Measure number="2">
-          <Rest>
-            <lid>7</lid>
-            <durationType>measure</durationType>
-            <duration z="4" n="4"/>
-            </Rest>
-          <BarLine>
-            <subtype>end</subtype>
-            <span>1</span>
-            <lid>8</lid>
-            </BarLine>
+        <Measure>
+          <voice>
+            <Rest>
+              <linked>
+                </linked>
+              <durationType>measure</durationType>
+              <duration>4/4</duration>
+              </Rest>
+            </voice>
           </Measure>
         </Staff>
       <name>Flute</name>
@@ -379,32 +313,6 @@
       <Division>480</Division>
       <Style>
         <createMultiMeasureRests>1</createMultiMeasureRests>
-        <TextStyle>
-          <halign>left</halign>
-          <valign>baseline</valign>
-          <offsetType>spatium</offsetType>
-          <name>Chord Symbol</name>
-          <family>FreeSerif</family>
-          <size>12</size>
-          <sizeIsSpatiumDependent>1</sizeIsSpatiumDependent>
-          <systemFlag>1</systemFlag>
-          </TextStyle>
-        <page-layout>
-          <page-height>1683.78</page-height>
-          <page-width>1190.55</page-width>
-          <page-margins type="even">
-            <left-margin>56.6929</left-margin>
-            <right-margin>56.6929</right-margin>
-            <top-margin>56.6929</top-margin>
-            <bottom-margin>113.386</bottom-margin>
-            </page-margins>
-          <page-margins type="odd">
-            <left-margin>56.6929</left-margin>
-            <right-margin>56.6929</right-margin>
-            <top-margin>56.6929</top-margin>
-            <bottom-margin>113.386</bottom-margin>
-            </page-margins>
-          </page-layout>
         <Spatium>1.76389</Spatium>
         </Style>
       <showInvisible>1</showInvisible>
@@ -412,23 +320,14 @@
       <showFrames>1</showFrames>
       <showMargins>0</showMargins>
       <metaTag name="partName">Alto Saxophone</metaTag>
-      <PageList>
-        <Page>
-          <System>
-            </System>
-          <System>
-            </System>
-          </Page>
-        </PageList>
       <Part>
         <Staff id="1">
           <linkedTo>2</linkedTo>
           <StaffType group="pitched">
             <name>Standard</name>
             </StaffType>
-          <bracket type="-1" span="0"/>
           </Staff>
-        <trackName></trackName>
+        <trackName>Alto Saxophone</trackName>
         <Instrument>
           <longName>Alto Saxophone</longName>
           <shortName>A. Sax.</shortName>
@@ -458,68 +357,82 @@
           <Channel>
             <program value="65"/>
             </Channel>
+          <Channel name="Chord symbols">
+            <program value="65"/>
+            </Channel>
           </Instrument>
         </Part>
       <Staff id="1">
         <VBox>
           <height>10</height>
-          <lid>10</lid>
+          <linked>
+            <location>
+              <staves>-1</staves>
+              </location>
+            </linked>
           <Text>
             <style>Instrument Name (Part)</style>
             <text>Alto Saxophone</text>
             </Text>
           </VBox>
-        <Measure number="1">
-          <Clef>
-            <concertClefType>G</concertClefType>
-            <transposingClefType>G</transposingClefType>
-            <lid>11</lid>
-            </Clef>
-          <KeySig>
-            <lid>12</lid>
-            <accidental>3</accidental>
-            </KeySig>
-          <TimeSig>
-            <lid>13</lid>
-            <sigN>4</sigN>
-            <sigD>4</sigD>
-            <showCourtesySig>1</showCourtesySig>
-            </TimeSig>
-          <Harmony>
-            <root>17</root>
-            <name>7</name>
-            <lid>14</lid>
-            </Harmony>
-          <Chord>
-            <lid>15</lid>
-            <durationType>quarter</durationType>
-            <Note>
-              <lid>16</lid>
-              <pitch>60</pitch>
-              <tpc>14</tpc>
-              <tpc2>17</tpc2>
-              </Note>
-            </Chord>
-          <Rest>
-            <lid>17</lid>
-            <durationType>quarter</durationType>
-            </Rest>
-          <Rest>
-            <lid>18</lid>
-            <durationType>half</durationType>
-            </Rest>
+        <Measure>
+          <voice>
+            <Clef>
+              <concertClefType>G</concertClefType>
+              <transposingClefType>G</transposingClefType>
+              <linked>
+                </linked>
+              </Clef>
+            <KeySig>
+              <linked>
+                </linked>
+              <accidental>3</accidental>
+              </KeySig>
+            <TimeSig>
+              <linked>
+                </linked>
+              <sigN>4</sigN>
+              <sigD>4</sigD>
+              </TimeSig>
+            <Harmony>
+              <root>17</root>
+              <name>7</name>
+              <linked>
+                </linked>
+              </Harmony>
+            <Chord>
+              <linked>
+                </linked>
+              <durationType>quarter</durationType>
+              <Note>
+                <linked>
+                  </linked>
+                <pitch>60</pitch>
+                <tpc>14</tpc>
+                <tpc2>17</tpc2>
+                </Note>
+              </Chord>
+            <Rest>
+              <linked>
+                </linked>
+              <durationType>quarter</durationType>
+              </Rest>
+            <Rest>
+              <linked>
+                </linked>
+              <durationType>half</durationType>
+              </Rest>
+            </voice>
           </Measure>
-        <Measure number="2">
-          <Rest>
-            <lid>19</lid>
-            <durationType>measure</durationType>
-            <duration z="4" n="4"/>
-            </Rest>
-          <BarLine>
-            <subtype>end</subtype>
-            <span>1</span>
-            <lid>20</lid>
-            </BarLine>
+        <Measure>
+          <voice>
+            <Rest>
+              <linked>
+                </linked>
+              <durationType>measure</durationType>
+              <duration>4/4</duration>
+              </Rest>
+            </voice>
           </Measure>
         </Staff>
       <name>Alto Saxophone</name>

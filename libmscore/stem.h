@@ -15,8 +15,6 @@
 
 #include "element.h"
 
-class QPainter;
-
 namespace Ms {
 
 class Chord;
@@ -26,51 +24,60 @@ class Chord;
 ///    Graphic representation of a note stem.
 //---------------------------------------------------------
 
-class Stem : public Element {
-      Q_OBJECT
-
-      QLineF line;            // p1 is attached to note head
+class Stem final : public Element {
+      QLineF line;                  // p1 is attached to notehead
+      qreal _lineWidth;
       qreal _userLen;
-      qreal _len;             // allways positive
-
-      virtual void startEdit(MuseScoreView*, const QPointF&);
+      qreal _len       { 0.0 };     // always positive
 
    public:
       Stem(Score* = 0);
       Stem &operator=(const Stem&) = delete;
 
-      virtual Stem* clone() const        { return new Stem(*this); }
-      virtual Element::Type type() const { return Element::Type::STEM; }
-      virtual void draw(QPainter*) const;
-      virtual bool isEditable() const    { return true; }
-      virtual void layout();
-      virtual void spatiumChanged(qreal /*oldValue*/, qreal /*newValue*/);
+      Stem* clone() const override        { return new Stem(*this); }
+      ElementType type() const override   { return ElementType::STEM; }
+      void draw(QPainter*) const override;
+      bool isEditable() const override    { return true; }
+      void layout() override;
+      void spatiumChanged(qreal /*oldValue*/, qreal /*newValue*/) override;
 
-      virtual void editDrag(const EditData&);
-      virtual void updateGrips(Grip*, QVector<QRectF>&) const;
-      virtual int grips() const override { return 1; }
-      virtual void write(Xml& xml) const;
-      virtual void read(XmlReader& e);
-      virtual void reset();
-      virtual bool acceptDrop(const DropData&) const override;
-      virtual Element* drop(const DropData&);
+      void startEdit(EditData&) override;
+      void editDrag(EditData&) override;
+      void write(XmlWriter& xml) const override;
+      void read(XmlReader& e) override;
+      bool readProperties(XmlReader&) override;
+      void reset() override;
+      bool acceptDrop(EditData&) const override;
+      Element* drop(EditData&) override;
 
-      virtual QVariant getProperty(P_ID propertyId) const;
-      virtual bool setProperty(P_ID propertyId, const QVariant&);
+      QVariant getProperty(Pid propertyId) const override;
+      bool setProperty(Pid propertyId, const QVariant&) override;
+      QVariant propertyDefault(Pid id) const override;
 
-      Chord* chord() const            { return (Chord*)parent(); }
+      int vStaffIdx() const override;
+
+      Chord* chord() const            { return toChord(parent()); }
       bool up() const;
 
       qreal userLen() const           { return _userLen; }
       void setUserLen(qreal l)        { _userLen = l; }
 
-      qreal lineWidth() const;
+      qreal lineWidth() const         { return _lineWidth; }
+      qreal lineWidthMag() const      { return _lineWidth * mag(); }
+      void setLineWidth(qreal w)      { _lineWidth = w; }
 
-      QPointF hookPos() const;
       void setLen(qreal l);
       qreal len() const               { return _len; }
+
+      QPointF hookPos() const;
       qreal stemLen() const;
       QPointF p2() const              { return line.p2(); }
+
+      EditBehavior normalModeEditBehavior() const override { return EditBehavior::Edit; }
+      int gripsCount() const override { return 1; }
+      Grip initialEditModeGrip() const override { return Grip::START; }
+      Grip defaultGrip() const override { return Grip::START; }
+      std::vector<QPointF> gripsPositions(const EditData&) const override;
       };
 
 

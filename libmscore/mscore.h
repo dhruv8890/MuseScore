@@ -14,11 +14,12 @@
 #define __MSCORE_H__
 
 #include "config.h"
+#include "style.h"
 
 namespace Ms {
 
-#define MSC_VERSION     "2.07"
-static const int MSCVERSION = 207;
+#define MSC_VERSION     "3.01"
+static constexpr int MSCVERSION = 301;
 
 // History:
 //    1.3   added staff->_barLineSpan
@@ -33,6 +34,7 @@ static const int MSCVERSION = 207;
 //    1.12  use durationType, remove tickLen
 //    1.13  Clefs: userOffset is not (mis)used for vertical layout position
 //    1.14  save user modified beam position as spatium value (Versions 0.9.6 - 1.3)
+
 //    1.15  save timesig inline; Lyrics "endTick" replaced by "ticks"
 //    1.16  spanners (hairpin, trill etc.) are now inline and have no ticks anymore
 //    1.17  new <Score> toplevel structure to support linked parts (excerpts)
@@ -47,6 +49,7 @@ static const int MSCVERSION = 207;
 //    1.24  default image size is spatium dependent
 //      -   symbol numbers in TextLine() replaced by symbol names
 //          TextStyle: frameWidth, paddingWidth are now in Spatium units (instead of mm)
+
 //    2.00  (Version 2.0)
 //    2.01  save SlurSegment position relative to staff
 //    2.02  save instrumentId, note slashes
@@ -54,13 +57,21 @@ static const int MSCVERSION = 207;
 //    2.04  added hideSystemBarLine flag to Staff
 //    2.05  breath segment changed to use tick of following chord rather than preceding chord
 //    2.06  Glissando moved from final chord to start note (Version 2.0.x)
-//    2.07  irregular, breakMMrest, more style options, system divider, bass string for tab (2.1)
+//
+//    2.07  irregular, breakMMrest, more style options, system divider, bass string for tab (3.0)
+
+//    3.00  (Version 3.0 alpha)
 
 
 class MStyle;
 class Sequencer;
 
-static const int VOICES = 4;
+enum class HairpinType : signed char;
+
+#ifndef VOICES
+#define VOICES 4
+#endif
+
 inline int staff2track(int staffIdx) { return staffIdx << 2; }
 inline int track2staff(int voice)    { return voice >> 2;    }
 inline int track2voice(int track)    { return track & 3;     }
@@ -68,13 +79,19 @@ inline int trackZeroVoice(int track) { return track & ~3;    }
 
 static const int MAX_TAGS = 32;
 
-static const qreal INCH = 25.4;
-static const qreal PPI  = 72.0;           // printer points per inch
-static const qreal SPATIUM20 = 5.0 / PPI; // size of Spatium for 20pt font in inch
-static const int MAX_STAVES = 4;
-#define MMSP(x)  Spatium((x) * .1)
+static const int MAX_HEADERS = 3;
+static const int MAX_FOOTERS = 3;
 
-static const int  SHADOW_NOTE_LIGHT       = 120;
+static constexpr qreal INCH      = 25.4;
+static constexpr qreal PPI       = 72.0;           // printer points per inch
+static constexpr qreal DPI_F     = 5;
+static constexpr qreal DPI       = 72.0 * DPI_F;
+static constexpr qreal SPATIUM20 = 5.0 * (DPI / 72.0);
+static constexpr qreal DPMM      = DPI / INCH;
+
+static constexpr int MAX_STAVES  = 4;
+
+static const int  SHADOW_NOTE_LIGHT       = 135;
 
 static const char mimeSymbolFormat[]      = "application/musescore/symbol";
 static const char mimeSymbolListFormat[]  = "application/musescore/symbollist";
@@ -84,62 +101,6 @@ static const int  VISUAL_STRING_NONE      = -100;     // no ordinal for the visu
                                                       // varies according to visual order and presence of bass strings)
 static const int  STRING_NONE             = -1;       // no ordinal for a physical string (0 = topmost in instrument)
 static const int  FRET_NONE               = -1;       // no ordinal for a fret
-
-//---------------------------------------------------------
-//   ArticulationType
-//---------------------------------------------------------
-
-enum class ArticulationType : char {
-      Fermata,
-      Shortfermata,
-      Longfermata,
-      Verylongfermata,
-      Sforzatoaccent,
-//      Espressivo,
-      Staccato,
-      Staccatissimo,
-      Tenuto,
-      Portato,
-      Marcato,
-      FadeIn,
-      FadeOut,
-      VolumeSwell,
-      WiggleSawtooth,
-      WiggleSawtoothWide,
-      WiggleVibratoLargeFaster,
-      WiggleVibratoLargeSlowest,
-      Ouvert,
-      Plusstop,
-      Upbow,
-      Downbow,
-      Reverseturn,
-      Turn,
-      Trill,
-      Prall,
-      Mordent,
-      PrallPrall,
-      PrallMordent,
-      UpPrall,
-      DownPrall,
-      UpMordent,
-      DownMordent,
-      PrallDown,
-      PrallUp,
-      LinePrall,
-      Schleifer,
-      Snappizzicato,
-//      Tapping,
-//      Slapping,
-//      Popping,
-      // Fingerings
-      ThumbPosition,
-      LuteFingThumb,
-      LuteFingFirst,
-      LuteFingSecond,
-      LuteFingThird,
-      ARTICULATIONS
-      };
-
 
 //---------------------------------------------------------
 //   BracketType
@@ -159,32 +120,6 @@ enum class PlaceText : char {
       };
 
 //---------------------------------------------------------
-//   AlignmentFlags
-//---------------------------------------------------------
-
-enum class AlignmentFlags : char {
-      LEFT     = 0,
-      RIGHT    = 1,
-      HCENTER  = 2,
-      TOP      = 0,
-      BOTTOM   = 4,
-      VCENTER  = 8,
-      BASELINE = 16,
-      CENTER = AlignmentFlags::HCENTER | AlignmentFlags::VCENTER,
-      HMASK = AlignmentFlags::LEFT | AlignmentFlags::RIGHT | AlignmentFlags::HCENTER,
-      VMASK = AlignmentFlags::TOP | AlignmentFlags::BOTTOM | AlignmentFlags::VCENTER | AlignmentFlags::BASELINE
-      };
-
-//---------------------------------------------------------
-//   OffsetType
-//---------------------------------------------------------
-
-enum class OffsetType : char {
-      ABS,       ///< offset in point units
-      SPATIUM    ///< offset in staff space units
-      };
-
-//---------------------------------------------------------
 //   TransposeDirection
 //---------------------------------------------------------
 
@@ -197,7 +132,7 @@ enum class TransposeDirection : char {
 //---------------------------------------------------------
 
 enum class TransposeMode : char {
-      BY_KEY, BY_INTERVAL, DIATONICALLY
+      TO_KEY, BY_INTERVAL, DIATONICALLY
       };
 
 //---------------------------------------------------------
@@ -206,23 +141,6 @@ enum class TransposeMode : char {
 
 enum class SelectType : char {
       SINGLE, RANGE, ADD
-      };
-
-//---------------------------------------------------------
-//   NoteType
-//---------------------------------------------------------
-
-enum class NoteType : char {
-      NORMAL,
-      ACCIACCATURA,
-      APPOGGIATURA,       // grace notes
-      GRACE4,
-      GRACE16,
-      GRACE32,
-      GRACE8_AFTER,
-      GRACE16_AFTER,
-      GRACE32_AFTER,
-      INVALID
       };
 
 //---------------------------------------------------------
@@ -265,67 +183,27 @@ enum class StaffGroup : char {
 const int STAFF_GROUP_MAX = int(StaffGroup::TAB) + 1;      // out of enum to avoid compiler complains about not handled switch cases
 
 //---------------------------------------------------------
-//   Text Style Type
-//    Enumerate the list of build in text styles.
-//    Must be in sync with list in setDefaultStyle().
-//---------------------------------------------------------
-
-enum class TextStyleType : char {
-      DEFAULT = 0,
-      TITLE,
-      SUBTITLE,
-      COMPOSER,
-      POET,
-      LYRIC1,
-      LYRIC2,
-      FINGERING,
-      LH_GUITAR_FINGERING,
-      RH_GUITAR_FINGERING,
-
-      STRING_NUMBER,
-      INSTRUMENT_LONG,
-      INSTRUMENT_SHORT,
-      INSTRUMENT_EXCERPT,
-      DYNAMICS,
-      TECHNIQUE,
-      TEMPO,
-      METRONOME,
-      MEASURE_NUMBER,
-      TRANSLATOR,
-
-      TUPLET,
-      SYSTEM,
-      STAFF,
-      HARMONY,
-      REHEARSAL_MARK,
-      REPEAT_LEFT,       // align to start of measure
-      REPEAT_RIGHT,      // align to end of measure
-      REPEAT,            // obsolete
-      VOLTA,
-      FRAME,
-
-      TEXTLINE,
-      GLISSANDO,
-      OTTAVA,
-      PEDAL,
-      HAIRPIN,
-      BENCH,
-      HEADER,
-      FOOTER,
-      INSTRUMENT_CHANGE,
-      FIGURED_BASS,
-
-      TEXT_STYLES
-      };
-
-//---------------------------------------------------------
 //   BarLineType
 //---------------------------------------------------------
 
-enum class BarLineType : char {
-      NORMAL, DOUBLE, START_REPEAT, END_REPEAT,
-      BROKEN, END, END_START_REPEAT, DOTTED
+enum class BarLineType {
+      NORMAL           = 1,
+      DOUBLE           = 2,
+      START_REPEAT     = 4,
+      END_REPEAT       = 8,
+      BROKEN           = 0x10,
+      END              = 0x20,
+      END_START_REPEAT = 0x40,
+      DOTTED           = 0x80
       };
+
+constexpr BarLineType operator| (BarLineType t1, BarLineType t2) {
+      return static_cast<BarLineType>(static_cast<int>(t1) | static_cast<int>(t2));
+      }
+constexpr bool operator& (BarLineType t1, BarLineType t2) {
+      return static_cast<int>(t1) & static_cast<int>(t2);
+      }
+
 
 // Icon() subtypes
 enum class IconType : signed char {
@@ -335,7 +213,57 @@ enum class IconType : signed char {
       SBEAM, MBEAM, NBEAM, BEAM32, BEAM64, AUTOBEAM,
       FBEAM1, FBEAM2,
       VFRAME, HFRAME, TFRAME, FFRAME, MEASURE,
-      BRACKETS
+      BRACKETS, PARENTHESES
+      };
+
+//---------------------------------------------------------
+//   MScoreError
+//---------------------------------------------------------
+
+enum MsError {
+      MS_NO_ERROR,
+      NO_NOTE_SELECTED,
+      NO_CHORD_REST_SELECTED,
+      NO_LYRICS_SELECTED,
+      NO_NOTE_REST_SELECTED,
+      NO_FLIPPABLE_SELECTED,
+      NO_STAFF_SELECTED,
+      NO_NOTE_FIGUREDBASS_SELECTED,
+      CANNOT_INSERT_TUPLET,
+      CANNOT_SPLIT_TUPLET,
+      CANNOT_SPLIT_MEASURE_FIRST_BEAT,
+      CANNOT_SPLIT_MEASURE_TUPLET,
+      NO_DEST,
+      DEST_TUPLET,
+      TUPLET_CROSSES_BAR,
+      DEST_LOCAL_TIME_SIGNATURE,
+      DEST_TREMOLO,
+      NO_MIME,
+      DEST_NO_CR,
+      CANNOT_CHANGE_LOCAL_TIMESIG,
+      };
+
+/// \cond PLUGIN_API \private \endcond
+struct MScoreError {
+      MsError no;
+      const char* group;
+      const char* txt;
+      };
+
+//---------------------------------------------------------
+//   MPaintDevice
+///   \cond PLUGIN_API \private \endcond
+//---------------------------------------------------------
+
+class MPaintDevice : public QPaintDevice {
+
+   protected:
+      virtual int metric(PaintDeviceMetric m) const;
+
+   public:
+      MPaintDevice() : QPaintDevice() {}
+      virtual QPaintEngine* paintEngine() const;
+      virtual ~MPaintDevice() {}
       };
 
 //---------------------------------------------------------
@@ -343,34 +271,35 @@ enum class IconType : signed char {
 //    MuseScore application object
 //---------------------------------------------------------
 
-class MScore : public QObject {
-      Q_OBJECT
-
-      static MStyle* _defaultStyle;       // buildin modified by preferences
+class MScore {
+      Q_GADGET
+      static MStyle _baseStyle;          // buildin initial style
+      static MStyle _defaultStyle;       // buildin modified by preferences
       static MStyle* _defaultStyleForParts;
 
-      static MStyle* _baseStyle;          // buildin initial style
       static QString _globalShare;
       static int _hRaster, _vRaster;
       static bool _verticalOrientation;
 
-#ifdef SCRIPT_INTERFACE
-      static QQmlEngine* _qml;
-#endif
+      static MPaintDevice* _paintDevice;
 
    public:
-      enum class Direction  : char { AUTO, UP, DOWN };
-      enum class DirectionH : char { AUTO, LEFT, RIGHT };
-      enum class OrnamentStyle : char { DEFAULT, BAROQUE};
-      enum class GlissandoStyle : char { CHROMATIC, WHITE_KEYS, BLACK_KEYS, DIATONIC };
-      Q_ENUMS(Direction DirectionH OrnamentStyle GlissandoStyle)
+      enum class DirectionH : char { /**.\{*/ AUTO, LEFT, RIGHT /**\}*/ };
+      enum class OrnamentStyle : char { /**.\{*/ DEFAULT, BAROQUE /**\}*/ };
+      Q_ENUM(DirectionH);
+      Q_ENUM(OrnamentStyle);
+
+      static MsError _error;
+      static std::vector<MScoreError> errorList;
 
       static void init();
 
-      static MStyle* defaultStyle();
-      static MStyle* defaultStyleForParts();
-      static MStyle* baseStyle();
-      static void setDefaultStyle(MStyle*);
+      static const MStyle& baseStyle()             { return _baseStyle;            }
+      static MStyle& defaultStyle()                { return _defaultStyle;         }
+      static const MStyle* defaultStyleForParts()  { return _defaultStyleForParts; }
+
+      static bool readDefaultStyle(QString file);
+      static void setDefaultStyle(const MStyle& s) { _defaultStyle = s; }
       static void defaultStyleForPartsHasChanged();
 
       static const QString& globalShare()   { return _globalShare; }
@@ -385,13 +314,14 @@ class MScore : public QObject {
       static bool verticalOrientation()            { return _verticalOrientation; }
       static void setVerticalOrientation(bool val) { _verticalOrientation = val;  }
 
-      static QColor selectColor[4];
+      static QColor selectColor[VOICES];
       static QColor defaultColor;
       static QColor dropColor;
       static QColor layoutBreakColor;
       static QColor frameMarginColor;
       static QColor bgColor;
       static bool warnPitchRange;
+      static int pedalEventsMinTicks;
 
       static bool playRepeats;
       static bool panPlayback;
@@ -400,18 +330,26 @@ class MScore : public QObject {
       static qreal nudgeStep50;
       static int defaultPlayDuration;
       static QString lastError;
-      static bool layoutDebug;
+
+// #ifndef NDEBUG
+      static bool noHorizontalStretch;
+      static bool noVerticalStretch;
+      static bool showSegmentShapes;
+      static bool showSkylines;
+      static bool showMeasureShapes;
+      static bool showBoundingRect;
+      static bool showSystemBoundingRect;
+      static bool showCorruptedMeasures;
+      static bool useFallbackFont;
+// #endif
+      static bool debugMode;
+      static bool testMode;
 
       static int division;
       static int sampleRate;
       static int mtcType;
       static Sequencer* seq;
 
-      static qreal PDPI;
-      static qreal DPI;
-      static qreal DPMM;
-      static bool debugMode;
-      static bool testMode;
       static bool saveTemplateMode;
       static bool noGui;
 
@@ -419,18 +357,26 @@ class MScore : public QObject {
       static bool noImages;
 
       static bool pdfPrinting;
+      static bool svgPrinting;
+      static double pixelRatio;
 
-#ifdef SCRIPT_INTERFACE
-      static QQmlEngine* qml();
-#endif
-      virtual void endCmd() { };
+      static qreal verticalPageGap;
+      static qreal horizontalPageGapEven;
+      static qreal horizontalPageGapOdd;
+
+      static MPaintDevice* paintDevice();
+
+      static void setError(MsError e) { _error = e; }
+      static const char* errorMessage();
+      static const char* errorGroup();
       };
 
 //---------------------------------------------------------
 //   center
 //---------------------------------------------------------
 
-inline static qreal center(qreal x1, qreal x2) {
+inline static qreal center(qreal x1, qreal x2)
+      {
       return (x1 + (x2 - x1) * .5);
       }
 
@@ -438,22 +384,16 @@ inline static qreal center(qreal x1, qreal x2) {
 //   limit
 //---------------------------------------------------------
 
-inline static int limit(int val, int min, int max) {
+inline static int limit(int val, int min, int max)
+      {
       if (val > max)
             return max;
       if (val < min)
             return min;
       return val;
       }
-
-Q_DECLARE_FLAGS(Align, AlignmentFlags);
-Q_DECLARE_OPERATORS_FOR_FLAGS(Align);
-
 }     // namespace Ms
 
-Q_DECLARE_METATYPE(Ms::MScore::Direction);
-Q_DECLARE_METATYPE(Ms::MScore::DirectionH);
-Q_DECLARE_METATYPE(Ms::TextStyleType);
+Q_DECLARE_METATYPE(Ms::BarLineType);
 
 #endif
-

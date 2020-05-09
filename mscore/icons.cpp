@@ -1,7 +1,6 @@
 //=============================================================================
 //  MuseScore
 //  Linux Music Score Editor
-//  $Id: icons.cpp 5246 2012-01-24 18:48:55Z wschweer $
 //
 //  Copyright (C) 2002-2007 Werner Schweer and others
 //
@@ -48,6 +47,9 @@ static const char* iconNames[] = {
       "note-32.svg",
       "note-64.svg",
       "note-128.svg",
+      "note-256.svg",
+      "note-512.svg",
+      "note-1024.svg",
       "note-natural.svg",
       "note-sharp.svg",
       "note-double-sharp.svg",
@@ -56,12 +58,15 @@ static const char* iconNames[] = {
       "rest.svg",
       "note-dot.svg",
       "note-double-dot.svg",
+      "note-dot3.svg",
+      "note-dot4.svg",
       "stem-flip.svg",
       "edit-undo.svg",
       "edit-redo.svg",
       "edit-cut.svg",
       "edit-copy.svg",
       "edit-paste.svg",
+      "edit-swap.svg",
       "document-print.svg",
       "clef.svg",
       "midi-input.svg",
@@ -83,6 +88,7 @@ static const char* iconNames[] = {
       "document-new.svg",
       "document-save.svg",
       "document-save-as.svg",
+      "document-save-online.svg",
       "mscore.png",
       "acciaccatura.svg",
       "appoggiatura.svg",
@@ -93,6 +99,11 @@ static const char* iconNames[] = {
       "grace16after.svg",
       "grace32after.svg",
       "mode-notes.svg",
+      // "mode-notes-steptime.svg", (using normal icon for the time being.)
+      "mode-notes-repitch.svg",
+      "mode-notes-rhythm.svg",
+      "mode-notes-realtime-auto.svg",
+      "mode-notes-realtime-manual.svg",
       "insert-symbol.svg",
       "note-tie.svg",
       "format-text-bold.svg",
@@ -110,7 +121,6 @@ static const char* iconNames[] = {
       "mode-photo.svg",
       "raster-horizontal.svg",
       "raster-vertical.svg",
-      "mode-repitch.svg",
       "list-unordered.svg",
       "list-ordered.svg",
       "format-indent-more.svg",
@@ -126,11 +136,13 @@ static const char* iconNames[] = {
       "frame-fretboard.svg",
       "measure.svg",
       "object-select.svg",
+      "mscz-icon.svg",
       "help-contents.svg",
       "go-home.svg",
       "go-previous.svg",
       "go-next.svg",
       "view-refresh.svg",
+      "parentheses.svg",
       "brackets.svg",
       "timesig_allabreve.svg",
       "timesig_common.svg",
@@ -147,8 +159,17 @@ static const char* iconNames[] = {
       "edit-reset.svg",
       "window-close.svg",
       "arrow_up.svg",
-      "arrow_down.svg"
+      "arrow_down.svg",
+      "mail.svg",
+      "bug.svg",
+      "bin.svg",
+      "note_timewise.svg",
+      "arrowsMoveToTop.svg"
       };
+
+//---------------------------------------------------------
+//   genIcons
+//---------------------------------------------------------
 
 void genIcons()
       {
@@ -156,14 +177,14 @@ void genIcons()
             QIcon* icon = new QIcon(new MIconEngine);
             icon->addFile(iconPath + iconNames[i]);
             icons[i] = icon;
-            if (icons[i]->isNull() || icons[i]->pixmap(12).isNull()) {
+            if (icon->isNull() || icon->pixmap(12).isNull()) {
                   qDebug("cannot load Icon <%s>", qPrintable(iconPath + iconNames[i]));
                   }
             }
 
       static const char* vtext[VOICES] = { "1","2","3","4" };
-      int iw = preferences.iconHeight * 2 / 3; // 16;
-      int ih = preferences.iconHeight;   // 24;
+      int iw = preferences.getInt(PREF_UI_THEME_ICONHEIGHT) * 2 / 3; // 16;
+      int ih = preferences.getInt(PREF_UI_THEME_ICONHEIGHT);   // 24;
       for (int i = 0; i < VOICES; ++i) {
             icons[int(Icons::voice1_ICON) + i] = new QIcon;
             QPixmap image(iw, ih);

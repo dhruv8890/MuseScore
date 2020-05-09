@@ -1,7 +1,6 @@
 //=============================================================================
 //  MusE Score
 //  Linux Music Score Editor
-//  $Id: seq.h 5660 2012-05-22 14:17:39Z wschweer $
 //
 //  Copyright (C) 2002-2009 Werner Schweer and others
 //
@@ -21,25 +20,28 @@
 #ifndef __SEQ_H__
 #define __SEQ_H__
 
+#include "libmscore/rendermidi.h"
 #include "libmscore/sequencer.h"
 #include "libmscore/fraction.h"
-#include "synthesizer/event.h"
-#include "driver.h"
 #include "libmscore/fifo.h"
 #include "libmscore/tempo.h"
+
+#include "audio/midi/event.h"
+#include "audio/drivers/driver.h"
 
 class QTimer;
 
 namespace Ms {
 
 class Note;
+class MasterScore;
 class Score;
 class Painter;
 class Measure;
 class Fraction;
 class Driver;
 class Part;
-struct Channel;
+class Channel;
 class ScoreView;
 class MasterSynthesizer;
 class Segment;
@@ -54,6 +56,7 @@ enum class SeqMsgId : char {
       NO_MESSAGE,
       TEMPO_CHANGE,
       PLAY, SEEK,
+      ALL_NOTE_OFF,
       MIDI_INPUT_EVENT
       };
 
@@ -105,7 +108,7 @@ class Seq : public QObject, public Sequencer {
 
       mutable QMutex mutex;
 
-      Score* cs;
+      MasterScore* cs;
       ScoreView* cv;
       bool running;                       // true if sequencer is available
       Transport state;                    // STOP, PLAY, STARTING=3
@@ -132,26 +135,62 @@ class Seq : public QObject, public Sequencer {
       double meterPeakValue[2];
       int peakTimer[2];
 
-      EventMap events;                    // playlist
-      EventMap countInEvents;
+      EventMap events;                    // playlist for playback mode
+      EventMap::const_iterator eventsEnd;
+      EventMap renderEvents;              // event list that is rendered in background
+      RangeMap renderEventsStatus;
+      MidiRenderer midi;
+      QFuture<void> midiRenderFuture;
+      bool allowBackgroundRendering = false; // should be set to true only when playing, so no
+                                             // score changes are possible.
+      EventMap countInEvents;             // playlist of any metronome countin clicks
+      QQueue<NPlayEvent> _liveEventQueue; // playlist for score editing and note entry (rendered live)
 
-      int playTime;                       // current play position in samples
-      int countInPlayTime;
-      int endTick;
+      int playFrame;                      // current play position in samples, relative to the first frame of playback
+      int countInPlayFrame;               // current play position in samples, relative to the first frame of countin
+      int endUTick;                       // the final tick of midi events collected by collectEvents()
 
       EventMap::const_iterator playPos;   // moved in real time thread
       EventMap::const_iterator countInPlayPos;
       EventMap::const_iterator guiPos;    // moved in gui thread
+
       QList<const Note*> markedNotes;     // notes marked as sounding
 
-      uint tackRest;                      // metronome state
-      uint tickRest;
-      qreal metronomeVolume;
+      uint tackRemain;        // metronome state (remaining audio samples)
+      uint tickRemain;
+      qreal tackVolume;       // relative volumes
+      qreal tickVolume;
+      qreal metronomeVolume;  // overall volume
+
+      unsigned initialMillisecondTimestampWithLatency; // millisecond timestamp (relative to PortAudio's initialization) of start of playback
 
       QTimer* heartBeatTimer;
       QTimer* noteTimer;
 
-      void collectMeasureEvents(Measure*, int staffIdx);
+      /**
+       * Preferences cached for faster access in realtime context.
+       * Using QSettings-based Ms::Preferences directly results in
+       * audible glitches on some systems (esp. MacOS, see #280493).
+       */
+      struct CachedPreferences {
+            int portMidiOutputLatencyMilliseconds = 0;
+            bool jackTimeBaseMaster = false;
+            bool useJackTransport = false;
+            bool useJackMidi = false;
+            bool useJackAudio = false;
+            bool useAlsaAudio = false;
+            bool usePortAudio = false;
+            bool usePulseAudio = false;
+
+            void update();
+            };
+      CachedPreferences cachedPrefs;
+
+      void startTransport();
+      void stopTransport();
+
+      void renderChunk(const MidiRenderer::Chunk&, EventMap*);
+      void updateEventsEnd();
 
       void setPos(int);
       void playEvent(const NPlayEvent&, unsigned framePos);
@@ -161,6 +200,10 @@ class Seq : public QObject, public Sequencer {
       void unmarkNotes();
       void updateSynthesizerState(int tick1, int tick2);
       void addCountInClicks();
+
+      int getPlayStartUtick();
+
+      inline QQueue<NPlayEvent>* liveEventQueue() { return &_liveEventQueue; }
 
    private slots:
       void seqMessage(int msg, int arg = 0);
@@ -199,7 +242,8 @@ class Seq : public QObject, public Sequencer {
       void prevMeasure();
       void prevChord();
 
-      void collectEvents();
+      void collectEvents(int utick);
+      void ensureBufferAsync(int utick);
       void guiStop();
       void stopWait();
       void setLoopIn();
@@ -213,15 +257,15 @@ class Seq : public QObject, public Sequencer {
       bool isStopped() const    { return state == Transport::STOP; }
 
       void processMessages();
-      void process(unsigned, float*);
-      int getEndTick() const    { return endTick;  }
+      void process(unsigned framesPerPeriod, float* buffer);
+      int getEndUTick() const   { return endUTick;  }
       bool isRealtime() const   { return true;     }
       void sendMessage(SeqMsg&) const;
 
       void setController(int, int, int);
       virtual void sendEvent(const NPlayEvent&);
       void setScoreView(ScoreView*);
-      Score* score() const   { return cs; }
+      MasterScore* score() const   { return cs; }
       ScoreView* viewer() const { return cv; }
       void initInstruments(bool realTime = false);
 
@@ -237,10 +281,17 @@ class Seq : public QObject, public Sequencer {
       void startNoteTimer(int duration);
       virtual void startNote(int channel, int, int, double nt) override;
       virtual void startNote(int channel, int, int, int, double nt) override;
+      virtual void playMetronomeBeat(BeatType type) override;
+
       void eventToGui(NPlayEvent);
       void stopNoteTimer();
       void recomputeMaxMidiOutPort();
       float metronomeGain() const      { return metronomeVolume; }
+
+      void setInitialMillisecondTimestampWithLatency();
+      unsigned getCurrentMillisecondTimestampWithLatency(unsigned framePos) const;
+
+      void preferencesChanged() { cachedPrefs.update(); }
       };
 
 extern Seq* seq;

@@ -14,6 +14,7 @@
 #define __REST_H__
 
 #include "chordrest.h"
+#include "notedot.h"
 
 namespace Ms {
 
@@ -23,65 +24,69 @@ enum class SymId;
 //---------------------------------------------------------
 //    @@ Rest
 ///     This class implements a rest.
-//    @P isFullMeasure  bool  (read only)
 //---------------------------------------------------------
 
 class Rest : public ChordRest {
-      Q_OBJECT
-      Q_PROPERTY(bool  isFullMeasure  READ isFullMeasureRest)
-
       // values calculated by layout:
       SymId _sym;
       int dotline    { -1  };       // depends on rest symbol
-      qreal _mmWidth { 0.0 };       // width of multi measure rest
+      qreal _mmWidth;               // width of multimeasure rest
+      qreal _mmRestNumberPos;       // vertical position of number of multimeasure rest
+      bool _gap      { false };     // invisible and not selectable for user
+      std::vector<NoteDot*> _dots;
 
-      virtual QRectF drag(EditData*) override;
-      virtual qreal upPos()   const override;
-      virtual qreal downPos() const override;
-      virtual qreal centerX() const override;
-      virtual void setUserOff(const QPointF& o) override;
+      QRectF drag(EditData&) override;
+      qreal upPos() const override;
+      qreal downPos() const override;
+      void setOffset(const QPointF& o) override;
+      Sid getPropertyStyle(Pid pid) const override;
 
-   protected:
-      ElementList _el;              ///< symbols or images
 
    public:
       Rest(Score* s = 0);
       Rest(Score*, const TDuration&);
       Rest(const Rest&, bool link = false);
-      ~Rest();
+      ~Rest() { qDeleteAll(_dots); }
 
-      virtual Element::Type type() const override { return Element::Type::REST; }
+      virtual ElementType type() const override { return ElementType::REST; }
       Rest &operator=(const Rest&) = delete;
 
-      virtual Rest* clone() const override        { return new Rest(*this, false); }
-      virtual Element* linkedClone()              { return new Rest(*this, true); }
-      virtual Measure* measure() const override   { return parent() ? (Measure*)(parent()->parent()) : 0; }
-      virtual qreal mag() const override;
-      virtual void draw(QPainter*) const override;
-      virtual void scanElements(void* data, void (*func)(void*, Element*), bool all=true) override;
+      Rest* clone() const override        { return new Rest(*this, false); }
+      Element* linkedClone() override     { return new Rest(*this, true); }
+      Measure* measure() const override   { return parent() ? toMeasure(parent()->parent()) : 0; }
+      qreal mag() const override;
+      void draw(QPainter*) const override;
+      void scanElements(void* data, void (*func)(void*, Element*), bool all = true) override;
+      void setTrack(int val);
 
-      virtual bool acceptDrop(const DropData&) const override;
-      virtual Element* drop(const DropData&) override;
-      virtual void layout() override;
+      bool acceptDrop(EditData&) const override;
+      Element* drop(EditData&) override;
+      void layout() override;
 
-      virtual void reset() override;
+      bool isGap() const               { return _gap;     }
+      virtual void setGap(bool v)      { _gap = v;        }
+
+      void reset() override;
 
       virtual void add(Element*);
       virtual void remove(Element*);
 
-      virtual void read(XmlReader&) override;
-      virtual void write(Xml& xml) const override;
+      void read(XmlReader&) override;
+      void write(XmlWriter& xml) const override;
 
-      void setMMWidth(qreal val);
+      void layoutMMRest(qreal val);
       qreal mmWidth() const        { return _mmWidth; }
       SymId getSymbol(TDuration::DurationType type, int line, int lines,  int* yoffset);
 
-      int getDotline() const { return dotline; }
+      void checkDots();
+      void layoutDots();
+      NoteDot* dot(int n);
+      int getDotline() const   { return dotline; }
+      static int getDotline(TDuration::DurationType durationType);
       SymId sym() const        { return _sym;    }
-      int computeLineOffset();
-      bool isFullMeasureRest() const { return durationType() == TDuration::DurationType::V_MEASURE; }
       bool accent();
       void setAccent(bool flag);
+      int computeLineOffset(int lines);
 
       virtual int upLine() const;
       virtual int downLine() const;
@@ -89,13 +94,18 @@ class Rest : public ChordRest {
       virtual qreal stemPosX() const;
       virtual QPointF stemPosBeam() const;
 
-      ElementList el()                            { return _el; }
-      const ElementList el() const                { return _el; }
+      void localSpatiumChanged(qreal oldValue, qreal newValue) override;
+      QVariant propertyDefault(Pid) const override;
+      void resetProperty(Pid id);
+      bool setProperty(Pid propertyId, const QVariant& v) override;
+      QVariant getProperty(Pid propertyId) const override;
+      void undoChangeDotsVisible(bool v);
 
-      bool setProperty(P_ID propertyId, const QVariant& v) override;
-
-      virtual QString accessibleInfo() override;
-      virtual QString screenReaderInfo() override;
+      Element* nextElement() override;
+      Element* prevElement() override;
+      QString accessibleInfo() const override;
+      QString screenReaderInfo() const override;
+      Shape shape() const override;
       };
 
 }     // namespace Ms

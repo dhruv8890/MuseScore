@@ -19,16 +19,17 @@
 #include "libmscore/instrtemplate.h"
 #include "omr/omr.h"
 #include "testutils.h"
+#include "mscore/musescore.h"
 #include "mscore/preferences.h"
 #include "libmscore/page.h"
-#include "synthesizer/msynthesizer.h"
+#include "audio/midi/msynthesizer.h"
 #include "libmscore/musescoreCore.h"
 #include "mscore/shortcut.h"
-#include "mscore/importmidi/importmidi_operations.h"
 #include "libmscore/xml.h"
 #include "libmscore/excerpt.h"
+#include "thirdparty/qzip/qzipreader_p.h"
 
-inline void initMyResources() {
+static void initMyResources() {
       Q_INIT_RESOURCE(mtest);
       Q_INIT_RESOURCE(musescorefonts_MScore);
       Q_INIT_RESOURCE(musescorefonts_Gootville);
@@ -36,43 +37,9 @@ inline void initMyResources() {
       Q_INIT_RESOURCE(musescorefonts_MuseJazz);
       Q_INIT_RESOURCE(musescorefonts_FreeSerif);
       Q_INIT_RESOURCE(musescorefonts_Free);
-}
-
-extern Ms::Score::FileError importOve(Ms::Score*, const QString& name);
+      }
 
 namespace Ms {
-
-#ifdef OMR
-extern Score::FileError importPdf(Score*, const QString&);
-#endif
-
-extern Score::FileError importBB(Score*, const QString&);
-extern Score::FileError importCapella(Score*, const QString&);
-extern Score::FileError importCapXml(Score*, const QString&);
-extern Score::FileError importCompressedMusicXml(Score*, const QString&);
-extern Score::FileError importMusicXml(Score*, const QString&);
-extern Score::FileError importGTP(Score*, const QString&);
-extern bool saveXml(Score*, const QString&);
-bool debugMode = false;
-QString revision;
-bool enableTestMode;
-
-Score* score;
-MasterSynthesizer* synti;
-QString dataPath;
-QIcon* icons[0];
-QString mscoreGlobalShare;
-
-// MuseScoreCore* MuseScoreCore::mscoreCore;
-
-//---------------------------------------------------------
-//   Preferences
-//---------------------------------------------------------
-
-Preferences preferences;
-Preferences::Preferences()
-      {
-      }
 
 //---------------------------------------------------------
 //   writeReadElement
@@ -86,7 +53,7 @@ Element* MTest::writeReadElement(Element* element)
       //
       QBuffer buffer;
       buffer.open(QIODevice::WriteOnly);
-      Xml xml(&buffer);
+      XmlWriter xml(element->score(), &buffer);
       xml.header();
       element->write(xml);
       buffer.close();
@@ -94,13 +61,10 @@ Element* MTest::writeReadElement(Element* element)
       //
       // read element
       //
-// printf("===read <%s>===\n", element->name());
-// printf("%s\n", buffer.buffer().data());
 
       XmlReader e(buffer.buffer());
       e.readNextStartElement();
       QString tag(e.name().toString());
-// printf("read tag %s\n", qPrintable(tag));
       element = Element::name2Element(e.name(), score);
       element->read(e);
       return element;
@@ -111,6 +75,7 @@ Element* MTest::writeReadElement(Element* element)
 //---------------------------------------------------------
 
 MTest::MTest()
+   : ed(0)
       {
       MScore::testMode = true;
       }
@@ -119,7 +84,7 @@ MTest::MTest()
 //   readScore
 //---------------------------------------------------------
 
-Score* MTest::readScore(const QString& name)
+MasterScore* MTest::readScore(const QString& name)
       {
       QString path = root + "/" + name;
       return readCreatedScore(path);
@@ -129,19 +94,23 @@ Score* MTest::readScore(const QString& name)
 //   readCreatedScore
 //---------------------------------------------------------
 
-Score* MTest::readCreatedScore(const QString& name)
+MasterScore* MTest::readCreatedScore(const QString& name)
       {
-      Score* score = new Score(mscore->baseStyle());
+      MasterScore* score = new MasterScore(mscore->baseStyle());
       QFileInfo fi(name);
       score->setName(fi.completeBaseName());
-//      MScore::testMode = true;
       QString csl  = fi.suffix().toLower();
 
+      ScoreLoad sl;
       Score::FileError rv;
-      if (csl == "cap")
+      if (csl == "cap") {
             rv = importCapella(score, name);
-      else if (csl == "capx")
+            score->setMetaTag("originalFormat", csl);
+            }
+      else if (csl == "capx") {
             rv = importCapXml(score, name);
+            score->setMetaTag("originalFormat", csl);
+            }
       else if (csl == "ove")
             rv = importOve(score, name);
       else if (csl == "sgu")
@@ -154,18 +123,21 @@ Score* MTest::readCreatedScore(const QString& name)
       else if (csl == "pdf")
             rv = importPdf(score, name);
 #endif
-      else if (csl == "xml")
+      else if (csl == "xml" || csl == "musicxml")
             rv = importMusicXml(score, name);
-      else if (csl == "gp3" || csl == "gp4" || csl == "gp5" || csl == "gpx")
+      else if (csl == "gp3" || csl == "gp4" || csl == "gp5" || csl == "gpx" || csl == "gp" || csl == "ptb")
             rv = importGTP(score, name);
       else
             rv = Score::FileError::FILE_UNKNOWN_TYPE;
 
-
       if (rv != Score::FileError::FILE_NO_ERROR) {
             QWARN(qPrintable(QString("readScore: cannot load <%1> type <%2>\n").arg(name).arg(csl)));
             delete score;
-            return 0;
+            score = 0;
+            }
+      else {
+            for (Score* s : score->scoreList())
+                  s->doLayout();
             }
       return score;
       }
@@ -178,40 +150,47 @@ bool MTest::saveScore(Score* score, const QString& name) const
       {
       QFileInfo fi(name);
 //      MScore::testMode = true;
-      return score->saveFile(fi);
+      return score->Score::saveFile(fi);
       }
 
 //---------------------------------------------------------
 //   compareFiles
 //---------------------------------------------------------
 
-bool MTest::compareFiles(const QString& saveName, const QString& compareWith) const
+bool MTest::compareFilesFromPaths(const QString& f1, const QString& f2)
       {
       QString cmd = "diff";
       QStringList args;
       args.append("-u");
-      args.append(saveName);
-      args.append(root + "/" + compareWith);
+      args.append("--strip-trailing-cr");
+      args.append(f2);
+      args.append(f1);
       QProcess p;
-qDebug() << "Running " << cmd << " with arg1:" << saveName << " and arg2: " << compareWith;
+      qDebug() << "Running " << cmd << " with arg1: " << QFileInfo(f2).fileName() << " and arg2: " << QFileInfo(f1).fileName();
       p.start(cmd, args);
       if (!p.waitForFinished() || p.exitCode()) {
             QByteArray ba = p.readAll();
             //qDebug("%s", qPrintable(ba));
-            //qDebug("   <diff -u %s %s failed", qPrintable(saveName),
-            //   qPrintable(QString(root + "/" + compareWith)));
+            //qDebug("   <diff -u %s %s failed", qPrintable(compareWith),
+            //   qPrintable(QString(root + "/" + saveName)));
             QTextStream outputText(stdout);
             outputText << QString(ba);
-            outputText << QString("   <diff -u %1 %2 failed").arg(QString(saveName)).arg(QString(root + "/" + compareWith));
+            outputText << QString("   <diff -u %1 %2 failed").arg(f2).arg(f1);
             return false;
             }
       return true;
+      }
+
+bool MTest::compareFiles(const QString& saveName, const QString& compareWith) const
+      {
+      return compareFilesFromPaths(saveName, root + "/" + compareWith);
       }
 
 //---------------------------------------------------------
 //   saveCompareScore
 //---------------------------------------------------------
 
+// bool MTest::saveCompareScore(MasterScore* score, const QString& saveName, const QString& compareWith) const
 bool MTest::saveCompareScore(Score* score, const QString& saveName, const QString& compareWith) const
       {
       if (!saveScore(score, saveName))
@@ -223,7 +202,7 @@ bool MTest::saveCompareScore(Score* score, const QString& saveName, const QStrin
 //   saveCompareMusicXMLScore
 //---------------------------------------------------------
 
-bool MTest::saveCompareMusicXmlScore(Score* score, const QString& saveName, const QString& compareWith)
+bool MTest::saveCompareMusicXmlScore(MasterScore* score, const QString& saveName, const QString& compareWith)
       {
       saveMusicXml(score, saveName);
       return compareFiles(saveName, compareWith);
@@ -233,23 +212,24 @@ bool MTest::saveCompareMusicXmlScore(Score* score, const QString& saveName, cons
 //   savePdf
 //---------------------------------------------------------
 
-bool MTest::savePdf(Score* cs, const QString& saveName)
+bool MTest::savePdf(MasterScore* cs, const QString& saveName)
       {
       QPrinter printerDev(QPrinter::HighResolution);
-      const PageFormat* pf = cs->pageFormat();
-      printerDev.setPaperSize(pf->size(), QPrinter::Inch);
+      double w = cs->styleD(Sid::pageWidth);
+      double h = cs->styleD(Sid::pageHeight);
+      printerDev.setPaperSize(QSizeF(w,h), QPrinter::Inch);
 
       printerDev.setCreator("MuseScore Version: " VERSION);
       printerDev.setFullPage(true);
       printerDev.setColorMode(QPrinter::Color);
-      printerDev.setDocName(cs->name());
+//      printerDev.setDocName(cs->name());
       printerDev.setOutputFormat(QPrinter::PdfFormat);
 
       printerDev.setOutputFileName(saveName);
       QPainter p(&printerDev);
       p.setRenderHint(QPainter::Antialiasing, true);
       p.setRenderHint(QPainter::TextAntialiasing, true);
-      double mag = printerDev.logicalDpiX() / MScore::DPI;
+      double mag = printerDev.logicalDpiX() / DPI;
             p.scale(mag, mag);
 
       const QList<Page*> pl = cs->pages();
@@ -282,7 +262,7 @@ bool MTest::savePdf(Score* cs, const QString& saveName)
 //   saveMusicXml
 //---------------------------------------------------------
 
-bool MTest::saveMusicXml(Score* score, const QString& saveName)
+bool MTest::saveMusicXml(MasterScore* score, const QString& saveName)
       {
       return saveXml(score, saveName);
       }
@@ -312,26 +292,59 @@ bool MTest::saveCompareMimeData(QByteArray mimeData, const QString& saveName, co
       }
 
 //---------------------------------------------------------
+//   extractRootFile
+//---------------------------------------------------------
+
+extern QString readRootFile(MQZipReader*, QList<QString>&);
+
+void MTest::extractRootFile(const QString& zipFile, const QString& destination)
+      {
+      MQZipReader f(zipFile);
+      QList<QString> images;
+      const QString rootfile = readRootFile(&f, images);
+
+      if (rootfile.isEmpty()) {
+            qDebug("can't find rootfile in: %s", qPrintable(zipFile));
+            return;
+            }
+
+      const QByteArray ba = f.fileData(rootfile);
+
+      QFile out(destination);
+      if (!out.open(QIODevice::WriteOnly))
+            return;
+      out.write(ba);
+      out.close();
+      }
+
+QString MTest::rootPath()
+      {
+      return TESTROOT "/mtest/";
+      }
+
+//---------------------------------------------------------
 //   initMTest
 //---------------------------------------------------------
 
 void MTest::initMTest()
       {
+      qputenv("QML_DISABLE_DISK_CACHE", "true");
+      qSetMessagePattern("%{function}: %{message}");
       initMyResources();
-      MScore::DPI  = 120;
-      MScore::PDPI = 120;
-      MScore::DPMM = MScore::DPI / INCH;
+//      DPI  = 120;
+//      PDPI = 120;
       MScore::noGui = true;
 
       synti  = new MasterSynthesizer();
       mscore = new MScore;
       new MuseScoreCore;
       mscore->init();
-      preferences.shortestNote = MScore::division / 4; // midi quantization: 1/16
+
+      preferences.init(true);
 
       root = TESTROOT "/mtest";
       loadInstrumentTemplates(":/instruments.xml");
-      score = readScore("/test.mscx");
+      score = readScore("test.mscx");
       }
 }
 

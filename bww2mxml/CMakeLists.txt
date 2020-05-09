@@ -2,7 +2,6 @@
 #  BWW to MusicXML converter
 #  Part of MusE Score
 #  Linux Music Score Editor
-#  $Id: CMakeLists.txt 5560 2012-04-19 11:39:34Z lasconic $
 #
 #  Copyright (C) 2002-2010 by Werner Schweer and others
 #
@@ -27,23 +26,22 @@ else (APPLE)
         set(INCS "")
 endif (APPLE)
 
-add_library(bww STATIC
-   ${INCS}
-   lexer.cpp
-   parser.cpp
-   symbols.cpp
-   writer.cpp
-   )
+set (BWW_DIR ${PROJECT_SOURCE_DIR}/importexport/bww)
 
-if (NOT MINGW AND NOT APPLE)
+include_directories(
+      ${BWW_DIR}
+      )
+
+if (NOT MINGW AND NOT APPLE AND NOT MSVC)
    add_executable(bww2mxml
       ${INCS}
-      lexer.cpp
+      ${BWW_SRC}
       main.cpp
       mxmlwriter.cpp
-      parser.cpp
-      symbols.cpp
-      writer.cpp
+      ${BWW_DIR}/writer.cpp
+      ${BWW_DIR}/lexer.cpp
+      ${BWW_DIR}/parser.cpp
+      ${BWW_DIR}/symbols.cpp
       )
 
    set_target_properties (
@@ -57,10 +55,5 @@ if (NOT MINGW AND NOT APPLE)
       )
    ADD_DEPENDENCIES(bww2mxml mops1)
    ADD_DEPENDENCIES(bww2mxml mops2)
-endif (NOT MINGW AND NOT APPLE)
-
-xcode_pch(bww all)
-
-ADD_DEPENDENCIES(bww mops1)
-ADD_DEPENDENCIES(bww mops2)
+endif (NOT MINGW AND NOT APPLE AND NOT MSVC)
 

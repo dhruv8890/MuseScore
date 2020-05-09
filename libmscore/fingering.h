@@ -2,7 +2,7 @@
 //  MuseScore
 //  Music Composition & Notation
 //
-//  Copyright (C) 2010-2011 Werner Schweer
+//  Copyright (C) 2010-2018 Werner Schweer
 //
 //  This program is free software; you can redistribute it and/or modify
 //  it under the terms of the GNU General Public License version 2
@@ -17,31 +17,29 @@
 
 namespace Ms {
 
-class Note;
-
 //---------------------------------------------------------
 //   @@ Fingering
 //---------------------------------------------------------
 
-class Fingering : public Text {
-      Q_OBJECT
+class Fingering final : public TextBase {
 
    public:
-      Fingering(Score* s);
-      virtual Fingering* clone() const override   { return new Fingering(*this); }
-      virtual Element::Type type() const override { return Element::Type::FINGERING; }
+      Fingering(Score*, Tid tid, ElementFlags ef = ElementFlag::HAS_TAG);
+      Fingering(Score* s, ElementFlags ef = ElementFlag::HAS_TAG);
 
-      Note* note() const { return (Note*)parent(); }
+      Fingering* clone() const override { return new Fingering(*this); }
+      ElementType type() const override { return ElementType::FINGERING; }
 
-      virtual void draw(QPainter*) const override;
-      virtual void layout() override;
-      virtual void write(Xml&) const override;
-      virtual void read(XmlReader&) override;
-      virtual void reset() override;
-      virtual int subtype() const override         { return (int) textStyleType(); }
-      virtual QString subtypeName() const override { return textStyle().name(); }
+      Note* note() const { return toNote(parent()); }
+      ElementType layoutType();
+      Placement calculatePlacement() const;
 
-      virtual QString accessibleInfo() override;
+      void draw(QPainter*) const override;
+      void layout() override;
+
+      QVariant propertyDefault(Pid id) const override;
+
+      QString accessibleInfo() const override;
       };
 
 

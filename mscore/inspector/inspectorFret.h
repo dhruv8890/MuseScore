@@ -20,17 +20,32 @@
 namespace Ms {
 
 //---------------------------------------------------------
-//   InspectorFret
+//   InspectorFretDiagram
 //---------------------------------------------------------
 
-class InspectorFret : public InspectorBase {
+class InspectorFretDiagram : public InspectorElementBase {
       Q_OBJECT
 
-      UiInspectorElement  e;
-      Ui::InspectorFret   f;
+      Ui::InspectorFretDiagram   f;
+      virtual void setElement() override;
+      void genericButtonToggled(QPushButton* b, bool v, FretDotType dtype);
+      std::vector<QPushButton*> dotTypeButtons;
+
+   private slots:
+      virtual void valueChanged(int idx) override;
+      void fretNumberChanged(int fretNumber);
+      void resetFretNumber();
+
+      void circleButtonToggled(bool v);
+      void crossButtonToggled(bool v);
+      void squareButtonToggled(bool v);
+      void triangleButtonToggled(bool v);
+      void barreButtonToggled(bool v);
+      void multidotButtonToggled(bool v);
+      void clearButtonClicked();
 
    public:
-      InspectorFret(QWidget* parent);
+      InspectorFretDiagram(QWidget* parent);
       };
 
 

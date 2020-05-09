@@ -1,7 +1,6 @@
 //=============================================================================
 //  Awl
 //  Audio Widget Library
-//  $Id:$
 //
 //  Copyright (C) 2002-2006 by Werner Schweer and others
 //
@@ -36,7 +35,7 @@ VolSlider::VolSlider(QWidget* parent)
       setScaleWidth(7);
       setLineStep(.8f);
       setPageStep(3.0f);
-      setDclickValue1(_minValue);
+      setDclickValue1(0.0);
       setDclickValue2(0.0);
       }
 

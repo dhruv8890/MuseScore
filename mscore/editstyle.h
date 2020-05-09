@@ -1,7 +1,6 @@
 //=============================================================================
 //  MusE Score
 //  Linux Music Score Editor
-//  $Id: editstyle.h 5403 2012-03-03 00:01:53Z miwarre $
 //
 //  Copyright (C) 2002-2010 Werner Schweer and others
 //
@@ -23,20 +22,32 @@
 
 #include "ui_editstyle.h"
 #include "globals.h"
+#include "libmscore/mscore.h"
 #include "libmscore/style.h"
 
 namespace Ms {
 
 class Score;
+class EditStyle;
 
 //---------------------------------------------------------
 //   StyleWidget
 //---------------------------------------------------------
 
 struct StyleWidget {
-      StyleIdx idx;
-      QWidget* widget;
+      Sid idx;
+      bool showPercent;
+      QObject* widget;
+      QToolButton* reset;
       };
+
+//---------------------------------------------------------
+//   EditStylePage
+///   This is a type for a pointer to any QWidget that is a member of EditStyle.
+///   It's used to create static references to the pointers to pages.
+//---------------------------------------------------------
+
+typedef QWidget* EditStyle::* EditStylePage;
 
 //---------------------------------------------------------
 //   EditStyle
@@ -47,19 +58,22 @@ class EditStyle : public QDialog, private Ui::EditStyleBase {
 
       Score* cs;
       QPushButton* buttonApplyToAllParts;
-      MStyle lstyle;    // local copy of style
-
       QButtonGroup* stemGroups[VOICES];
-
       QVector<StyleWidget> styleWidgets;
+      QButtonGroup* keySigNatGroup;
+      QButtonGroup* clefTypeGroup;
+      bool isTooBig;
+      bool hasShown;
 
-      void getValues();
+      virtual void showEvent(QShowEvent*);
+      virtual void hideEvent(QHideEvent*);
+      QVariant getValue(Sid idx);
       void setValues();
-      void setHeaderText(StyleIdx idx, QTextEdit* te);
-      void setFooterText(StyleIdx idx, QTextEdit* te);
 
-      void apply();
       void applyToAllParts();
+      const StyleWidget& styleWidget(Sid) const;
+
+      static const std::map<ElementType, EditStylePage> PAGES;
 
    private slots:
       void selectChordDescriptionFile();
@@ -68,18 +82,32 @@ class EditStyle : public QDialog, private Ui::EditStyleBase {
       void toggleFooterOddEven(bool);
       void buttonClicked(QAbstractButton*);
       void setSwingParams(bool);
-      void resetStyleValue(int i);
-
+      void concertPitchToggled(bool);
+      void lyricsDashMinLengthValueChanged(double);
+      void lyricsDashMaxLengthValueChanged(double);
+      void systemMinDistanceValueChanged(double);
+      void systemMaxDistanceValueChanged(double);
+      void resetStyleValue(int);
+      void valueChanged(int);
+      void textStyleChanged(int);
+      void resetTextStyle(Pid);
+      void textStyleValueChanged(Pid, QVariant);
       void on_comboFBFont_currentIndexChanged(int index);
+      void on_buttonTogglePagelist_clicked();
+      void editUserStyleName();
+      void endEditUserStyleName();
+      void resetUserStyleName();
 
-public:
-      static const int PAGE_NOTE = 6;
+   public:
       EditStyle(Score*, QWidget*);
       void setPage(int no);
+      void setScore(Score* s) { cs = s; }
+
+      void gotoElement(Element* e);
+      void gotoHeaderFooterPage();
+      static bool elementHasPage(Element* e);
       };
 
 
 } // namespace Ms
 #endif
-
-

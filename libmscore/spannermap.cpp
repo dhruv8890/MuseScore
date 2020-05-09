@@ -27,13 +27,14 @@ SpannerMap::SpannerMap()
 
 //---------------------------------------------------------
 //   update
+//   updates the internal lookup tree, not the map itself
 //---------------------------------------------------------
 
 void SpannerMap::update() const
       {
       std::vector< ::Interval<Spanner*> > intervals;
       for (auto i : *this)
-            intervals.push_back(Interval<Spanner*>(i.second->tick(), i.second->tick2(), i.second));
+            intervals.push_back(Interval<Spanner*>(i.second->tick().ticks(), i.second->tick2().ticks(), i.second));
       tree = IntervalTree<Spanner*>(intervals);
       dirty = false;
       }
@@ -70,6 +71,7 @@ const std::vector<Interval<Spanner*>>& SpannerMap::findOverlapping(int start, in
 
 void SpannerMap::addSpanner(Spanner* s)
       {
+#if 0
 #ifndef NDEBUG
       // check if spanner already in list
       for (auto i = begin(); i != end(); ++i) {
@@ -78,7 +80,8 @@ void SpannerMap::addSpanner(Spanner* s)
                   }
             }
 #endif
-      insert(std::pair<int,Spanner*>(s->tick(), s));
+#endif
+      insert(std::pair<int,Spanner*>(s->tick().ticks(), s));
       dirty = true;
       }
 
@@ -95,9 +98,23 @@ bool SpannerMap::removeSpanner(Spanner* s)
                   return true;
                   }
             }
-      qDebug("Score::removeSpanner: %s (%p) not found", s->name(), s);
+      qDebug("%s (%p) not found", s->name(), s);
       return false;
       }
+
+#ifndef NDEBUG
+//---------------------------------------------------------
+//   dump
+//---------------------------------------------------------
+
+void SpannerMap::dump() const
+      {
+      qDebug("SpannerMap::dump");
+      for (auto i = begin(); i != end(); ++i)
+            qDebug("   %5d: %s %p", i->first, i->second->name(), i->second);
+      }
+
+#endif
 
 }     // namespace Ms
 

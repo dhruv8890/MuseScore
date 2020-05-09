@@ -28,10 +28,8 @@ class Segment;
 //   @P range  enum (Dynamic.STAFF, .PART, .SYSTEM)
 //-----------------------------------------------------------------------------
 
-class Dynamic : public Text {
-      Q_OBJECT
-      Q_PROPERTY(Ms::Dynamic::Range range  READ dynRange  WRITE undoSetDynRange)
-
+class Dynamic final : public TextBase {
+   Q_GADGET
    public:
       enum class Type : char {
             OTHER,
@@ -69,6 +67,17 @@ class Dynamic : public Text {
             STAFF, PART, SYSTEM
             };
 
+      enum class Speed : char {
+            SLOW, NORMAL, FAST
+            };
+
+      struct ChangeSpeedItem {
+            Speed speed;
+            const char* name;
+            };
+
+      Q_ENUM(Type);
+
    private:
       Type _dynamicType;
 
@@ -76,43 +85,64 @@ class Dynamic : public Text {
       int _velocity;     // associated midi velocity 0-127
       Range _dynRange;   // STAFF, PART, SYSTEM
 
-      virtual QRectF drag(EditData*) override;
+      int _changeInVelocity         { 128 };
+      Speed _velChangeSpeed         { Speed::NORMAL };
+
+      QRectF drag(EditData&) override;
 
    public:
       Dynamic(Score*);
       Dynamic(const Dynamic&);
-      virtual Dynamic* clone() const override     { return new Dynamic(*this); }
-      virtual Element::Type type() const override { return Element::Type::DYNAMIC; }
-      Segment* segment() const                    { return (Segment*)parent(); }
-      Measure* measure() const                    { return (Measure*)parent()->parent(); }
+      Dynamic* clone() const override     { return new Dynamic(*this); }
+      ElementType type() const override   { return ElementType::DYNAMIC; }
+      Segment* segment() const            { return (Segment*)parent(); }
+      Measure* measure() const            { return (Measure*)parent()->parent(); }
 
-      void setDynamicType(Type val)      { _dynamicType = val;   }
+      void setDynamicType(Type val)               { _dynamicType = val;   }
       void setDynamicType(const QString&);
-      QString dynamicTypeName() const;
-      Type dynamicType() const            { return _dynamicType; }
-      virtual int subtype() const         { return (int) _dynamicType; }
-      virtual QString subtypeName() const { return dynamicTypeName(); }
+      static QString dynamicTypeName(Dynamic::Type type);
+      QString dynamicTypeName() const { return dynamicTypeName(_dynamicType); }
+      Type dynamicType() const                     { return _dynamicType; }
+      int subtype() const override         { return static_cast<int>(_dynamicType); }
+      QString subtypeName() const override { return dynamicTypeName(); }
 
-      virtual void layout() override;
-      virtual void write(Xml& xml) const override;
-      virtual void read(XmlReader&) override;
+      void layout() override;
+      void write(XmlWriter& xml) const override;
+      void read(XmlReader&) override;
 
-      virtual bool isEditable() const override { return true; }
-      virtual void startEdit(MuseScoreView*, const QPointF&) override;
-      virtual void endEdit() override;
-      virtual void reset() override;
+      bool isEditable() const override { return true; }
+      void startEdit(EditData&) override;
+      void endEdit(EditData&) override;
+      void reset() override;
 
-      void setVelocity(int v);
+      void setVelocity(int v)   { _velocity = v;    }
       int velocity() const;
       Range dynRange() const    { return _dynRange; }
       void setDynRange(Range t) { _dynRange = t;    }
       void undoSetDynRange(Range t);
 
-      virtual QVariant getProperty(P_ID propertyId) const override;
-      virtual bool     setProperty(P_ID propertyId, const QVariant&) override;
-      virtual QVariant propertyDefault(P_ID id) const override;
+      int changeInVelocity() const;
+      void setChangeInVelocity(int val);
+      Fraction velocityChangeLength() const;
 
-      virtual QString accessibleInfo() override;
+      Speed velChangeSpeed() const  { return _velChangeSpeed; }
+      void setVelChangeSpeed(Speed val) { _velChangeSpeed = val; }
+      static QString speedToName(Speed speed);
+      static Speed nameToSpeed(QString name);
+
+      QVariant getProperty(Pid propertyId) const override;
+      bool     setProperty(Pid propertyId, const QVariant&) override;
+      QVariant propertyDefault(Pid id) const override;
+      Pid propertyId(const QStringRef& xmlName) const override;
+      QString propertyUserValue(Pid) const override;
+
+      std::unique_ptr<ElementGroup> getDragGroup(std::function<bool(const Element*)> isDragged) override;
+
+      QString accessibleInfo() const override;
+      QString screenReaderInfo() const override;
+      void doAutoplace();
+
+      static const std::vector<ChangeSpeedItem> changeSpeedTable;
       };
 
 }     // namespace Ms

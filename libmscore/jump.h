@@ -28,19 +28,11 @@ namespace Ms {
 //   @P playUntil   string
 //---------------------------------------------------------
 
-
-class Jump : public Text {
-      Q_OBJECT
-
-      Q_PROPERTY(QString continueAt  READ continueAt  WRITE undoSetContinueAt)
-      Q_PROPERTY(QString jumpTo      READ jumpTo      WRITE undoSetJumpTo)
-      Q_PROPERTY(QString playUntil   READ playUntil   WRITE undoSetPlayUntil)
-      //Q_Property(Ms::Jump::Type      READ jumpType)
-      //Q_ENUMS(Type)
-
+class Jump final : public TextBase {
       QString _jumpTo;
       QString _playUntil;
       QString _continueAt;
+      bool _playRepeats;
 
    public:
       enum class Type : char {
@@ -59,39 +51,44 @@ class Jump : public Text {
       Type jumpType() const;
       QString jumpTypeUserName() const;
 
-      virtual Jump* clone()          const override { return new Jump(*this); }
-      virtual Element::Type type()   const override { return Element::Type::JUMP; }
+      Jump* clone() const override      { return new Jump(*this);   }
+      ElementType type() const override { return ElementType::JUMP; }
+      int subtype() const override      { return int(jumpType());   }
 
-      Measure* measure() const         { return (Measure*)parent(); }
+      Measure* measure() const                  { return toMeasure(parent()); }
 
-      virtual void read(XmlReader&) override;
-      virtual void write(Xml& xml) const override;
+      void read(XmlReader&) override;
+      void write(XmlWriter& xml) const override;
 
-      QString jumpTo()               const { return _jumpTo;     }
-      QString playUntil()            const { return _playUntil;  }
-      QString continueAt()           const { return _continueAt; }
-      void setJumpTo(const QString& s)     { _jumpTo = s;        }
-      void setPlayUntil(const QString& s)  { _playUntil = s;     }
-      void setContinueAt(const QString& s) { _continueAt = s;    }
+      void layout() override;
+
+      QString jumpTo() const                    { return _jumpTo;     }
+      QString playUntil() const                 { return _playUntil;  }
+      QString continueAt() const                { return _continueAt; }
+      void setJumpTo(const QString& s)          { _jumpTo = s;        }
+      void setPlayUntil(const QString& s)       { _playUntil = s;     }
+      void setContinueAt(const QString& s)      { _continueAt = s;    }
       void undoSetJumpTo(const QString& s);
       void undoSetPlayUntil(const QString& s);
       void undoSetContinueAt(const QString& s);
+      bool playRepeats() const                  { return _playRepeats; }
+      void setPlayRepeats(bool val)             { _playRepeats = val;  }
 
-      virtual bool systemFlag() const override      { return true;        }
+      QVariant getProperty(Pid propertyId) const override;
+      bool setProperty(Pid propertyId, const QVariant&) override;
+      QVariant propertyDefault(Pid) const override;
 
-      virtual QVariant getProperty(P_ID propertyId) const override;
-      virtual bool setProperty(P_ID propertyId, const QVariant&) override;
-      virtual QVariant propertyDefault(P_ID) const override;
-
-      Element* nextElement() override;
-      Element* prevElement() override;
-      virtual QString accessibleInfo() override;
+      Element* nextSegmentElement() override;
+      Element* prevSegmentElement() override;
+      QString accessibleInfo() const override;
       };
 
+//---------------------------------------------------------
+//   JumpTypeTable
+//---------------------------------------------------------
 
 struct JumpTypeTable {
       Jump::Type type;
-      TextStyleType textStyleType;
       const char* text;
       const char* jumpTo;
       const char* playUntil;

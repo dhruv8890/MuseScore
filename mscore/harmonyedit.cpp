@@ -1,7 +1,6 @@
 //=============================================================================
 //  MuseScore
 //  Linux Music Score Editor
-//  $Id:$
 //
 //  Copyright (C) 2009-2011 Werner Schweer and others
 //
@@ -42,11 +41,11 @@ extern bool useFactorySettings;
 ChordStyleEditor::ChordStyleEditor(QWidget* parent)
    : QDialog(parent)
       {
+      setObjectName("ChordStyleEditor");
       setupUi(this);
-      setWindowTitle(tr("MuseScore: Chord Symbols Style Editor"));
+      setWindowTitle(tr("Chord Symbols Style Editor"));
       setWindowFlags(this->windowFlags() & ~Qt::WindowContextHelpButtonHint);
 
-      fileButton->setIcon(*icons[int(Icons::fileOpen_ICON)]);
       chordList = 0;
       score = 0;
 
@@ -63,7 +62,7 @@ ChordStyleEditor::ChordStyleEditor(QWidget* parent)
 void ChordStyleEditor::setScore(Score* s)
       {
       score = s;
-      setChordList(s->style()->chordList());
+      setChordList(s->style().chordList());
       }
 
 //---------------------------------------------------------
@@ -118,10 +117,12 @@ void ChordStyleEditor::loadChordDescriptionFile(const QString& s)
       ChordList* cl = new ChordList;
       if (!cl->read("chords.xml")) {
             qDebug("cannot read <chords.xml>");
+            delete cl;
             return;
             }
       if (!cl->read(s)) {
             qDebug("cannot read <%s>", qPrintable(s));
+            delete cl;
             return;
             }
       setChordList(cl);
@@ -158,7 +159,7 @@ void ChordStyleEditor::setChordList(ChordList* cl)
             paletteTab->addTab(accPalette, f.family);
             QFont qf(f.family);
             qf.setStyleStrategy(QFont::NoFontMerging);
-            int size = lrint(20.0 * MScore::DPI / PPI);
+            int size = lrint(20.0 * DPI / PPI);
             qf.setPixelSize(size);
 
             QFontMetricsF fi(qf);
@@ -197,11 +198,12 @@ void ChordStyleEditor::harmonyChanged(QTreeWidgetItem* current, QTreeWidgetItem*
 void ChordStyleEditor::save()
       {
       QSettings settings;
-      settings.beginGroup("ChordStyleEditor");
+      settings.beginGroup(objectName());
       settings.setValue("splitter1", splitter1->saveState());
       settings.setValue("splitter2", splitter2->saveState());
 //      settings.setValue("list", harmonyList->saveState());
       settings.setValue("col1", harmonyList->columnWidth(0));
+      MuseScore::saveGeometry(this);
       }
 
 //---------------------------------------------------------
@@ -210,9 +212,10 @@ void ChordStyleEditor::save()
 
 void ChordStyleEditor::restore()
       {
+      MuseScore::restoreGeometry(this);
       if (!useFactorySettings) {
             QSettings settings;
-            settings.beginGroup("ChordStyleEditor");
+            settings.beginGroup(objectName());
             splitter1->restoreState(settings.value("splitter1").toByteArray());
             splitter2->restoreState(settings.value("splitter2").toByteArray());
             harmonyList->setColumnWidth(0, settings.value("col1", 30).toInt());
@@ -230,9 +233,10 @@ HarmonyCanvas::HarmonyCanvas(QWidget* parent)
       setAcceptDrops(true);
       setFocusPolicy(Qt::StrongFocus);
       extraMag = 3.0;
-      chordDescription = 0;
-      chordList = 0;
-      moveElement = 0;
+      chordDescription = nullptr;
+      chordList   = nullptr;
+      moveElement = nullptr;
+      dragElement = nullptr;
       QAction* a = getAction("delete");
       addAction(a);
       connect(a, SIGNAL(triggered()), SLOT(deleteAction()));
@@ -250,7 +254,7 @@ void HarmonyCanvas::paintEvent(QPaintEvent* event)
 
       qreal spatium = gscore->spatium();
       qreal mag = PALETTE_SPATIUM * extraMag / spatium;
-      spatium = SPATIUM20 * MScore::DPI;
+      spatium = SPATIUM20;
 
       QPainter p(this);
 
@@ -275,13 +279,13 @@ void HarmonyCanvas::paintEvent(QPaintEvent* event)
             p.drawText(ts->x, ts->y, ts->text);
             }
 
-      if (dragElement && dragElement->type() == Element::Type::FSYMBOL) {
+      if (dragElement && dragElement->type() == ElementType::FSYMBOL) {
             FSymbol* sb = static_cast<FSymbol*>(dragElement);
 
-            double _spatium = 2.0 * PALETTE_SPATIUM / extraMag;
-            const TextStyle* st = &gscore->textStyle(TextStyleType::HARMONY);
-            QFont ff(st->fontPx(_spatium));
-            ff.setFamily(sb->font().family());
+//TODO:ws             double _spatium = 2.0 * PALETTE_SPATIUM / extraMag;
+//            const TextStyle* st = &gscore->textStyle(TextStyleType::HARMONY);
+//            QFont ff(st->font(_spatium * MScore::pixelRatio));
+//            ff.setFamily(sb->font().family());
 
             QString s;
             int code = sb->code();
@@ -291,7 +295,7 @@ void HarmonyCanvas::paintEvent(QPaintEvent* event)
                   }
             else
                   s = QChar(code);
-            p.setFont(ff);
+//TODO:ws            p.setFont(ff);
             QPen pen(Qt::yellow);
             p.setPen(pen);
             p.drawText(dragElement->pos(), s);
@@ -302,8 +306,9 @@ void HarmonyCanvas::paintEvent(QPaintEvent* event)
 //   render
 //---------------------------------------------------------
 
-void HarmonyCanvas::render(const QList<RenderAction>& renderList, double& x, double& y, int tpc, NoteSpellingType noteSpelling, NoteCaseType noteCase)
+void HarmonyCanvas::render(const QList<RenderAction>& /*renderList*/, double& /*x*/, double& /*y*/, int /*tpc*/, NoteSpellingType /*noteSpelling*/, NoteCaseType /*noteCase*/)
       {
+#if 0 // TODO:ws
       QStack<QPointF> stack;
       int fontIdx = 0;
       double _spatium = 2.0 * PALETTE_SPATIUM / extraMag;
@@ -314,15 +319,15 @@ void HarmonyCanvas::render(const QList<RenderAction>& renderList, double& x, dou
 
       foreach(ChordFont cf, chordList->fonts) {
             if (cf.family.isEmpty() || cf.family == "default")
-                  fontList.append(st->fontPx(_spatium * cf.mag));
+                  fontList.append(st->font(_spatium * cf.mag * MScore::pixelRatio));
             else {
-                  QFont ff(st->fontPx(_spatium * cf.mag));
+                  QFont ff(st->font(_spatium * cf.mag * MScore::pixelRatio));
                   ff.setFamily(cf.family);
                   fontList.append(ff);
                   }
             }
       if (fontList.isEmpty())
-            fontList.append(st->fontPx(_spatium));
+            fontList.append(st->font(_spatium * MScore::pixelRatio));
 
       foreach(const RenderAction& a, renderList) {
             if (a.type == RenderAction::RenderActionType::SET) {
@@ -388,6 +393,7 @@ void HarmonyCanvas::render(const QList<RenderAction>& renderList, double& x, dou
                         }
                   }
             }
+#endif
       }
 
 //---------------------------------------------------------
@@ -464,14 +470,15 @@ void HarmonyCanvas::setChordDescription(ChordDescription* sd, ChordList* sl)
 //   dropEvent
 //---------------------------------------------------------
 
-void HarmonyCanvas::dropEvent(QDropEvent* event)
+void HarmonyCanvas::dropEvent(QDropEvent* /*event*/)
       {
-      if (dragElement && dragElement->type() == Element::Type::FSYMBOL) {
+#if 0       // TODO:ws
+      if (dragElement && dragElement->type() == ElementType::FSYMBOL) {
             FSymbol* sb = static_cast<FSymbol*>(dragElement);
 
             double _spatium = 2.0 * PALETTE_SPATIUM / extraMag;
             const TextStyle* st = &gscore->textStyle(TextStyleType::HARMONY);
-            QFont ff(st->fontPx(_spatium));
+            QFont ff(st->font(_spatium * MScore::pixelRatio));
             ff.setFamily(sb->font().family());
 
 //            qDebug("drop %s", dragElement->name());
@@ -493,6 +500,7 @@ void HarmonyCanvas::dropEvent(QDropEvent* event)
             dragElement = 0;
             update();
             }
+#endif
       }
 
 //---------------------------------------------------------
@@ -501,16 +509,16 @@ void HarmonyCanvas::dropEvent(QDropEvent* event)
 
 void HarmonyCanvas::dragEnterEvent(QDragEnterEvent* event)
       {
-      const QMimeData* data = event->mimeData();
-      if (data->hasFormat(mimeSymbolFormat)) {
-            QByteArray a = data->data(mimeSymbolFormat);
+      const QMimeData* dta = event->mimeData();
+      if (dta->hasFormat(mimeSymbolFormat)) {
+            QByteArray a = dta->data(mimeSymbolFormat);
 
             XmlReader e(a);
 
             QPointF dragOffset;
             Fraction duration;
-            Element::Type type = Element::readType(e, &dragOffset, &duration);
-            if (type == Element::Type::FSYMBOL) {
+            ElementType type = Element::readType(e, &dragOffset, &duration);
+            if (type == ElementType::FSYMBOL) {
                   event->acceptProposedAction();
                   dragElement = Element::create(type, gscore);
                   dragElement->read(e);
@@ -537,7 +545,7 @@ void HarmonyCanvas::dragLeaveEvent(QDragLeaveEvent*)
 void HarmonyCanvas::dragMoveEvent(QDragMoveEvent* event)
       {
       event->acceptProposedAction();
-      if (dragElement && dragElement->type() == Element::Type::FSYMBOL) {
+      if (dragElement && dragElement->type() == ElementType::FSYMBOL) {
             dragElement->setPos(imatrix.map(event->pos()));
             update();
             }
@@ -561,7 +569,7 @@ void HarmonyCanvas::deleteAction()
 
 static void updateHarmony(void*, Element* e)
       {
-      if (e->type() == Element::Type::HARMONY)
+      if (e->type() == ElementType::HARMONY)
             static_cast<Harmony*>(e)->render();
       }
 
@@ -572,7 +580,7 @@ static void updateHarmony(void*, Element* e)
 void ChordStyleEditor::accept()
       {
       canvas->updateChordDescription();
-      score->style()->setChordList(chordList);
+      score->style().setChordList(chordList);
       chordList = 0;
 
       score->scanElements(0, updateHarmony);
@@ -594,7 +602,7 @@ void HarmonyCanvas::updateChordDescription()
       double x  = 0, y = 0;
       foreach(const TextSegment* ts, textList) {
             ++idx;
-            if (idx == 1) {     // dont save base
+            if (idx == 1) {     // don’t save base
                   x = ts->x + ts->width();
                   y = ts->y;
                   continue;

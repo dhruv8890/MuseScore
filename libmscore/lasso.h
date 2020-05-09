@@ -15,8 +15,6 @@
 
 #include "element.h"
 
-class QPainter;
-
 namespace Ms {
 
 //---------------------------------------------------------
@@ -24,30 +22,22 @@ namespace Ms {
 //---------------------------------------------------------
 
 class Lasso : public Element {
-      Q_OBJECT
-
-      QRectF _rect;
-      MuseScoreView* view;        // valid in edit mode
-
    public:
       Lasso(Score*);
       virtual Lasso* clone() const override        { return new Lasso(*this); }
-      virtual Element::Type type() const override  { return Element::Type::LASSO; }
+      ElementType type() const final { return ElementType::LASSO; }
       virtual void draw(QPainter*) const override;
       virtual bool isEditable() const override     { return true; }
-      virtual void editDrag(const EditData&) override;
-      virtual void updateGrips(Grip*, QVector<QRectF>&) const override;
-      virtual int grips() const override { return 8; }
+      virtual void editDrag(EditData&) override;
+      virtual void endDrag(EditData&)              {}
 
-      QRectF rect() const                 { return _rect; }
-      void setRect(const QRectF& r)       { _rect = r;    }
-      void setSize(qreal w, qreal h)      { _rect.setWidth(w), _rect.setHeight(h); }
+      virtual QVariant getProperty(Pid propertyId) const override;
+      virtual bool setProperty(Pid propertyId, const QVariant&) override;
 
-      virtual void layout() override;
-      virtual void startEdit(MuseScoreView*, const QPointF&) override;
-      virtual void endEdit() override;
-      virtual QVariant getProperty(P_ID propertyId) const override;
-      virtual bool setProperty(P_ID propertyId, const QVariant&) override;
+      int gripsCount() const override { return 8; }
+      Grip initialEditModeGrip() const override { return Grip(7); }
+      Grip defaultGrip() const override { return Grip(7); }
+      std::vector<QPointF> gripsPositions(const EditData&) const override;
       };
 
 

@@ -14,7 +14,6 @@
 //  algorithmus from Emilios Cambouropoulos as published in:
 //  "Automatic Pitch Spelling: From Numbers to Sharps and Flats"
 
-#include "synthesizer/event.h"
 #include "note.h"
 #include "key.h"
 #include "pitchspelling.h"
@@ -23,6 +22,8 @@
 #include "score.h"
 #include "part.h"
 #include "utils.h"
+
+#include "audio/midi/event.h"
 
 namespace Ms {
 
@@ -246,7 +247,7 @@ void tpc2name(int tpc, NoteSpellingType noteSpelling, NoteCaseType noteCase, QSt
       switch (n) {
             case -2:
                   if (explicitAccidental) {
-                        acc = QObject::tr("double flat");
+                        acc = QObject::tr("double ♭");
                         }
                   else if (noteSpelling == NoteSpellingType::GERMAN_PURE) {
                         switch (tpc) {
@@ -261,7 +262,7 @@ void tpc2name(int tpc, NoteSpellingType noteSpelling, NoteCaseType noteCase, QSt
                   break;
             case -1:
                   if (explicitAccidental)
-                        acc = QObject::tr("flat");
+                        acc = QObject::tr("♭");
                   else if (noteSpelling == NoteSpellingType::GERMAN_PURE)
                         acc = (tpc == TPC_A_B || tpc == TPC_E_B) ? "s" : "es";
                   else
@@ -270,13 +271,13 @@ void tpc2name(int tpc, NoteSpellingType noteSpelling, NoteCaseType noteCase, QSt
             case  0: acc = ""; break;
             case  1:
                   if (explicitAccidental)
-                        acc = QObject::tr("sharp");
+                        acc = QObject::tr("♯");
                   else
                         acc = (noteSpelling == NoteSpellingType::GERMAN_PURE) ? "is" : "#";
                   break;
             case  2:
                   if (explicitAccidental)
-                        acc = QObject::tr("double sharp");
+                        acc = QObject::tr("double ♯");
                   else
                         acc = (noteSpelling == NoteSpellingType::GERMAN_PURE) ? "isis" : "##";
                   break;
@@ -533,60 +534,6 @@ static const int ASIZE        = 1024;   // 2 ** WINDOW
 #endif
 
 //---------------------------------------------------------
-//   computeWindow
-//---------------------------------------------------------
-
-static int computeWindow(const QList<Event>& notes, int start, int end, int keyIdx)
-      {
-      int p   = 10000;
-      int idx = -1;
-      int pitch[10];
-
-      Q_ASSERT((end-start) < 10 && start != end);
-
-      int i = start;
-      int k = 0;
-      while (i < end)
-            pitch[k++] = notes[i++].dataA() % 12;
-
-      for (; k < 10; ++k)
-            pitch[k] = pitch[k-1];
-
-      for (int i = 0; i < 512; ++i) {
-            int pa    = 0;
-            int pb    = 0;
-            int l     = pitch[0] * 2 + (i & 1);
-            Q_ASSERT((l >= 0) && (l < int(sizeof(tab1)/sizeof(*tab1))));
-            int lof1a = tab1[l];
-            int lof1b = tab2[l];
-
-            for (int k = 1; k < 10; ++k) {
-                  int l = pitch[k] * 2 + ((i & (1 << k)) >> k);
-                  Q_ASSERT((l >= 0) && (l < int(sizeof(tab1)/sizeof(*tab1))));
-                  int lof2a = tab1[l];
-                  int lof2b = tab2[l];
-                  pa += penalty(lof1a, lof2a, keyIdx);
-                  pb += penalty(lof1b, lof2b, keyIdx);
-                  lof1a = lof2a;
-                  lof1b = lof2b;
-                  }
-            if (pa < pb) {
-                  if (pa < p) {
-                        p   = pa;
-                        idx = i;
-                        }
-                  }
-            else {
-                  if (pb < p) {
-                        p   = pb;
-                        idx = i * -1;
-                        }
-                  }
-            }
-      return idx;
-      }
-
-//---------------------------------------------------------
 //   tpc
 //---------------------------------------------------------
 
@@ -608,7 +555,7 @@ int tpc(int idx, int pitch, int opt)
 //   computeWindow
 //---------------------------------------------------------
 
-int computeWindow(const QList<Note*>& notes, int start, int end)
+int computeWindow(const std::vector<Note*>& notes, int start, int end)
       {
       int p   = 10000;
       int idx = -1;
@@ -619,11 +566,11 @@ int computeWindow(const QList<Note*>& notes, int start, int end)
       int k = 0;
       while (i < end) {
             pitch[k] = notes[i]->pitch() % 12;
-            int tick = notes[i]->chord()->tick();
+            Fraction tick = notes[i]->chord()->tick();
             key[k]   = int(notes[i]->staff()->key(tick)) + 7;
             if (key[k] < 0 || key[k] > 14) {
                   qDebug("illegal key at tick %d: %d, window %d-%d",
-                     tick, key[k] - 7, start, end);
+                     tick.ticks(), key[k] - 7, start, end);
                   return 0;
                   // abort();
                   }
@@ -636,19 +583,19 @@ int computeWindow(const QList<Note*>& notes, int start, int end)
             key[k]   = key[k-1];
             }
 
-      for (int i = 0; i < 512; ++i) {
+      for (i = 0; i < 512; ++i) {
             int pa    = 0;
             int pb    = 0;
             int l     = pitch[0] * 2 + (i & 1);
-            Q_ASSERT(l >= 0 && l <= (int)(sizeof(tab1)/sizeof(*tab1)));
+            Q_ASSERT(l >= 0 && l <= static_cast<int>(sizeof(tab1)/sizeof(*tab1)));
             int lof1a = tab1[l];
             int lof1b = tab2[l];
 
-            for (int k = 1; k < 10; ++k) {
-                  int l = pitch[k] * 2 + ((i & (1 << k)) >> k);
-                  Q_ASSERT(l >= 0 && l <= (int)(sizeof(tab1)/sizeof(*tab1)));
-                  int lof2a = tab1[l];
-                  int lof2b = tab2[l];
+            for (k = 1; k < 10; ++k) {
+                  int l1 = pitch[k] * 2 + ((i & (1 << k)) >> k);
+                  Q_ASSERT(l1 >= 0 && l1 <= static_cast<int>(sizeof(tab1)/sizeof(*tab1)));
+                  int lof2a = tab1[l1];
+                  int lof2b = tab2[l1];
                   pa += penalty(lof1a, lof2a, key[k]);
                   pb += penalty(lof1b, lof2b, key[k]);
                   lof1a = lof2a;
@@ -681,87 +628,29 @@ int computeWindow(const QList<Note*>& notes, int start, int end)
       }
 
 //---------------------------------------------------------
-//   spell
-//---------------------------------------------------------
-
-void spell(QList<Event>& notes, int key)
-      {
-      key += 7;
-
-      int n = notes.size();
-      if (n == 0)
-            return;
-
-      int start = 0;
-      while (start < n) {
-            int end = start + WINDOW;
-            if (end > n)
-                  end = n;
-            int opt = computeWindow(notes, start, end, key);
-            const int* tab;
-            if (opt < 0) {
-                  tab = tab2;
-                  opt *= -1;
-                  }
-            else
-                  tab = tab1;
-
-            if (start == 0) {
-                  notes[0].setTpc(tab[(notes[0].dataA() % 12) * 2 + (opt & 1)]);
-                  if (n > 1)
-                        notes[1].setTpc(tab[(notes[1].dataA() % 12) * 2 + ((opt & 2)>>1)]);
-                  if (n > 2)
-                        notes[2].setTpc(tab[(notes[2].dataA() % 12) * 2 + ((opt & 4)>>2)]);
-                  }
-            if ((end - start) >= 6) {
-                  notes[start+3].setTpc(tab[(notes[start+3].dataA() % 12) * 2 + ((opt &  8) >> 3)]);
-                  notes[start+4].setTpc(tab[(notes[start+4].dataA() % 12) * 2 + ((opt & 16) >> 4)]);
-                  notes[start+5].setTpc(tab[(notes[start+5].dataA() % 12) * 2 + ((opt & 32) >> 5)]);
-                  }
-            if (end == n) {
-                  int n = end - start;
-                  int k;
-                  switch(n - 6) {
-                        case 3:
-                              k = end - start - 3;
-                              notes[end-3].setTpc(tab[(notes[end-3].dataA() % 12) * 2 + ((opt & (1<<k)) >> k)]);
-                        case 2:
-                              k = end - start - 2;
-                              notes[end-2].setTpc(tab[(notes[end-2].dataA() % 12) * 2 + ((opt & (1<<k)) >> k)]);
-                        case 1:
-                              k = end - start - 1;
-                              notes[end-1].setTpc(tab[(notes[end-1].dataA() % 12) * 2 + ((opt & (1<<k)) >> k)]);
-                        }
-                  break;
-                  }
-            // advance to next window
-            start += 3;
-            }
-      }
-
-//---------------------------------------------------------
 //   changeAllTpcs
 //---------------------------------------------------------
 
 void changeAllTpcs(Note* n, int tpc1)
       {
       Interval v;
+      Fraction tick = n && n->chord() ? n->chord()->tick() : Fraction(-1,1);
       if (n && n->part() && n->part()->instrument()) {
-            v = n->part()->instrument()->transpose();
+            v = n->part()->instrument(tick)->transpose();
             v.flip();
             }
       int tpc2 = Ms::transposeTpc(tpc1, v, true);
-      n->undoChangeProperty(P_ID::TPC1, tpc1);
-      n->undoChangeProperty(P_ID::TPC2, tpc2);
+      n->undoChangeProperty(Pid::TPC1, tpc1);
+      n->undoChangeProperty(Pid::TPC2, tpc2);
       }
 
 //---------------------------------------------------------
 //   spell
 //---------------------------------------------------------
 
-void Score::spellNotelist(QList<Note*>& notes)
+void Score::spellNotelist(std::vector<Note*>& notes)
       {
-      int n = notes.size();
+      int n = int(notes.size());
 
       int start = 0;
       while (start < n) {
@@ -790,15 +679,17 @@ void Score::spellNotelist(QList<Note*>& notes)
                   changeAllTpcs(notes[start+5], tab[(notes[start+5]->pitch() % 12) * 2 + ((opt & 32) >> 5)]);
                   }
             if (end == n) {
-                  int n = end - start;
+                  int n1 = end - start;
                   int k;
-                  switch(n - 6) {
+                  switch(n1 - 6) {
                         case 3:
                               k = end - start - 3;
                               changeAllTpcs(notes[end-3], tab[(notes[end-3]->pitch() % 12) * 2 + ((opt & (1<<k)) >> k)]);
+                              Q_FALLTHROUGH();
                         case 2:
                               k = end - start - 2;
                               changeAllTpcs(notes[end-2], tab[(notes[end-2]->pitch() % 12) * 2 + ((opt & (1<<k)) >> k)]);
+                              Q_FALLTHROUGH();
                         case 1:
                               k = end - start - 1;
                               changeAllTpcs(notes[end-1], tab[(notes[end-1]->pitch() % 12) * 2 + ((opt & (1<<k)) >> k)]);
@@ -899,6 +790,92 @@ int absStep2pitchByKey(int step, Key key)
       int octave = step / STEP_DELTA_OCTAVE;
       int deltaPitch = step2deltaPitchByKey(step % STEP_DELTA_OCTAVE, key);
       return octave * PITCH_DELTA_OCTAVE + deltaPitch;
+      }
+
+//---------------------------------------------------------
+//   tpc2degree
+//    the scale degree of a TPC for a given Key
+//---------------------------------------------------------
+
+int tpc2degree(int tpc, Key key)
+      {
+      const QString names("CDEFGAB");
+      const QString scales("CGDAEBFCGDAEBFC");
+      QString scale = scales[int(key)+7];
+      QString stepName = tpc2stepName(tpc);
+      return (names.indexOf(stepName) - names.indexOf(scale) +28) % 7;
+      }
+
+//---------------------------------------------------------
+//   tpcInterval
+///   Finds tpc of a note based on an altered interval
+///   from a starting note
+//---------------------------------------------------------
+
+int tpcInterval(int startTpc, int interval, int alter)
+      {
+      Q_ASSERT(interval > 0);
+      static const int intervals[7] = {
+//          1  2  3   4  5  6  7
+            0, 2, 4, -1, 1, 3, 5
+      };
+
+      int result = startTpc + intervals[(interval - 1) % 7] + alter * TPC_DELTA_SEMITONE;
+      //ensure that we don't have anything more than double sharp or double flat
+      //(I know, breaking some convention, but it's the best we can do for now)
+      while (result > Tpc::TPC_MAX)
+            result -= TPC_DELTA_ENHARMONIC;
+      while (result < Tpc::TPC_MIN)
+            result += TPC_DELTA_ENHARMONIC;
+
+      return result;
+      }
+
+//---------------------------------------------------------
+//   step2pitchInterval
+///   Finds pitch between notes a specified altered interval away
+///
+///   For example:
+///         step = 3, alter = 0 means major 3rd
+///         step = 5, alter = -1 means diminished 5
+///         step = 6, alter = 2 means augmented sixth
+//---------------------------------------------------------
+
+int step2pitchInterval(int step, int alter)
+      {
+      Q_ASSERT(step > 0);
+      static const int intervals[7] = {
+//          1  2  3  4  5  6  7
+            0, 2, 4, 5, 7, 9, 11
+      };
+
+      return intervals[(step - 1) % 7] + alter;
+      }
+
+//----------------------------------------------
+//   function2Tpc
+///   might be temporary, just used to parse nashville notation now
+///
+//----------------------------------------------
+int function2Tpc(const QString& s, Key key) {
+      //TODO - PHV: allow for alternate spellings
+      int alter = 0;
+      int step;
+      if (!s.isEmpty() && s[0].isDigit()) {
+            step = s[0].digitValue();
+            }
+      else if (s.size() > 1 && s[1].isDigit()) {
+            step = s[1].digitValue();
+            if (s[0] == 'b')
+                  alter = -1;
+            else if (s[0] == '#')
+                  alter = 1;
+            }
+      else
+            return Tpc::TPC_INVALID;
+
+      int keyTpc = int(key) + 14; //tpc of key (ex. F# major would be Tpc::F_S)
+      return tpcInterval(keyTpc, step, alter);
       }
 
 }

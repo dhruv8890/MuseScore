@@ -15,10 +15,11 @@
 
 namespace Ms {
 
-class Xml;
+class XmlWriter;
 class Score;
 class XmlReader;
 enum class AccidentalVal : signed char;
+enum class ClefType : signed char;
 
 //---------------------------------------------------------
 //   Key
@@ -26,28 +27,53 @@ enum class AccidentalVal : signed char;
 
 enum class Key {
       C_B = -7,
-      G_B, D_B, A_B, E_B, B_B, F,   C,
-      G,   D,   A,   E,   B,   F_S, C_S,
-      MIN = Key::C_B,
-      MAX = Key::C_S,
+      G_B,
+      D_B,
+      A_B,
+      E_B,
+      B_B,
+      F,
+      C,    // == 0
+      G,
+      D,
+      A,
+      E,
+      B,
+      F_S,
+      C_S,
+      MIN     = Key::C_B,
+      MAX     = Key::C_S,
       INVALID = Key::MIN - 1,
-      NUM_OF = Key::MAX - Key::MIN + 1,
+      NUM_OF  = Key::MAX - Key::MIN + 1,
       DELTA_ENHARMONIC = 12
       };
 
+//---------------------------------------------------------
+//   KeyMode
+//---------------------------------------------------------
+
 enum class KeyMode {
       UNKNOWN = -1,
-      NONE, MAJOR, MINOR
+      NONE,
+      MAJOR,
+      MINOR,
+      DORIAN,
+      PHRYGIAN,
+      LYDIAN,
+      MIXOLYDIAN,
+      AEOLIAN,
+      IONIAN,
+      LOCRIAN
       };
 
-static inline bool operator<  (Key a, Key b) { return int(a) < int(b); }
-static inline bool operator>  (Key a, Key b) { return int(a) > int(b); }
-static inline bool operator>  (Key a, int b) { return int(a) > b; }
-static inline bool operator<  (Key a, int b) { return int(a) < b; }
-static inline bool operator== (Key a, Key b) { return int(a) == int(b); }
-static inline bool operator!= (Key a, Key b) { return int(a) != int(b); }
-static inline Key  operator+= (Key& a, const Key& b) { return a = Key(int(a) + int(b)); }
-static inline Key  operator-= (Key& a, const Key& b) { return a = Key(int(a) - int(b)); }
+static inline bool operator< (Key a, Key b) { return static_cast<int>(a) < static_cast<int>(b); }
+static inline bool operator> (Key a, Key b) { return static_cast<int>(a) > static_cast<int>(b); }
+static inline bool operator> (Key a, int b) { return static_cast<int>(a) > b; }
+static inline bool operator< (Key a, int b) { return static_cast<int>(a) < b; }
+static inline bool operator== (const Key a, const Key b) { return int(a) == int(b); }  
+static inline bool operator!= (const Key a, const Key b) { return static_cast<int>(a) != static_cast<int>(b); }
+static inline Key operator+= (Key& a, const Key& b) { return a = Key(static_cast<int>(a) + static_cast<int>(b)); }
+static inline Key operator-= (Key& a, const Key& b) { return a = Key(static_cast<int>(a) - static_cast<int>(b)); }
 
 enum class SymId;
 
@@ -67,9 +93,10 @@ struct KeySym {
 //---------------------------------------------------------
 
 class KeySigEvent {
-      Key _key            { Key::INVALID };          // -7 -> +7
+      Key _key            { Key::INVALID     };          // -7 -> +7
       KeyMode _mode       { KeyMode::UNKNOWN };
-      bool _custom        { false };
+      bool _custom        { false            };
+      bool _forInstrumentChange{ false          };
       QList<KeySym> _keySymbols;
 
       void enforceLimits();
@@ -79,6 +106,7 @@ class KeySigEvent {
       KeySigEvent(const KeySigEvent&);
 
       bool operator==(const KeySigEvent& e) const;
+      bool operator!=(const KeySigEvent& e) const { return !(*this == e); }
 
       void setKey(Key v);
       void print() const;
@@ -90,8 +118,9 @@ class KeySigEvent {
       void setCustom(bool val)   { _custom = val; _key = Key::C;   }
       bool isValid() const       { return _key != Key::INVALID;    }
       bool isAtonal() const      { return _mode == KeyMode::NONE;  }
+      void setForInstrumentChange(bool forInstrumentChange) { _forInstrumentChange = forInstrumentChange; }
+      bool forInstrumentChange() const{ return _forInstrumentChange; }
       void initFromSubtype(int);    // for backward compatibility
-      void initLineList(char*);
       QList<KeySym>& keySymbols()             { return _keySymbols; }
       const QList<KeySym>& keySymbols() const { return _keySymbols; }
       };
@@ -102,21 +131,27 @@ class KeySigEvent {
 //---------------------------------------------------------
 
 static const int TIE_CONTEXT = 0x10;
+static const int MIN_ACC_STATE = 0;
+static const int MAX_ACC_STATE = 75;
 
 class AccidentalState {
-      uchar state[75];    // (0 -- 4) | TIE_CONTEXT
+      uchar state[MAX_ACC_STATE];    // (0 -- 4) | TIE_CONTEXT
 
    public:
       AccidentalState() {}
       void init(Key key);
+      void init(const KeySigEvent&, ClefType);
+      AccidentalVal accidentalVal(int line, bool &error) const;
       AccidentalVal accidentalVal(int line) const;
       bool tieContext(int line) const;
       void setAccidentalVal(int line, AccidentalVal val, bool tieContext = false);
       };
 
 struct Interval;
-extern Key transposeKey(Key oldKey, const Interval&);
 
+enum class PreferSharpFlat : char;
+extern Key transposeKey(Key oldKey, const Interval&, PreferSharpFlat prefer = PreferSharpFlat(0));
+extern Interval calculateInterval(Key key1, Key key2);
 
 }     // namespace Ms
 #endif

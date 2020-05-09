@@ -1,7 +1,6 @@
 //=============================================================================
 //  MuseScore
 //  Linux Music Score Editor
-//  $Id:$
 //
 //  Copyright (C) 2009 Werner Schweer and others
 //
@@ -20,9 +19,10 @@
 
 #ifndef __SCORETAB_H__
 #define __SCORETAB_H__
-#include "musescore.h"
+
 namespace Ms {
 
+class MuseScore;
 class ScoreView;
 class Score;
 enum class MagIdx : char;
@@ -32,12 +32,27 @@ enum class MagIdx : char;
 //---------------------------------------------------------
 
 struct TabScoreView {
-      Score* score;
+      MasterScore* score;
       int part;
-      TabScoreView(Score* s) {
+      TabScoreView(MasterScore* s) {
             score   = s;
             part    = 0;
             }
+      };
+
+//---------------------------------------------------------
+//   MsTabBar
+//---------------------------------------------------------
+
+class MsTabBar : public QTabBar {
+      int _middleClickedTab { -1 };
+
+   public:
+      MsTabBar(QWidget* parent = nullptr) : QTabBar(parent) {}
+
+   private:
+      void mousePressEvent(QMouseEvent* e) override;
+      void mouseReleaseEvent(QMouseEvent* e) override;
       };
 
 //---------------------------------------------------------
@@ -46,32 +61,43 @@ struct TabScoreView {
 
 class ScoreTab : public QWidget {
       Q_OBJECT
-      QList<Score*>* scoreList;
-      QTabBar* tab;                 // list of scores
-      QTabBar* tab2;                // list of excerpts for current score
-      QStackedLayout* stack;
-      MuseScore* mainWindow;
+      QList<MasterScore*>* scoreList { nullptr };
+      MsTabBar* tab  { nullptr };                 // list of scores
+      MsTabBar* tab2 { nullptr };                 // list of excerpts for current score
+      QStackedLayout* stack { nullptr };
+      MuseScore* mainWindow { nullptr };;
       void clearTab2();
+      TabScoreView* tabScoreView(int idx);
+      const TabScoreView* tabScoreView(int idx) const;
 
    signals:
       void currentScoreViewChanged(ScoreView*);
       void tabCloseRequested(int);
       void actionTriggered(QAction*);
+      void tabInserted(int);
+      void tabRemoved(int);
+      void tabRenamed(int);
+
+   private slots:
+      void setCurrent(int);
 
    public slots:
       void updateExcerpts();
       void setExcerpt(int);
-      void setCurrent(int);
+      void tabMoved(int, int);
 
    public:
-      ScoreTab(QList<Score*>*, QWidget* parent = 0);
+      ScoreTab(QList<MasterScore*>*, QWidget* parent = 0);
       ~ScoreTab();
 
-      void insertTab(Score*);
+      MsTabBar* getTab() const { return tab; }
+
+      void insertTab(MasterScore*);
       void setTabText(int, const QString&);
       int currentIndex() const;
       void setCurrentIndex(int);
-      void removeTab(int);
+      bool setCurrentScore(Score* s);
+      void removeTab(int, bool noCurrentChangedSignal = false);
       int count() const       { return scoreList->size(); }
       ScoreView* view(int) const;
       QSplitter* viewSplitter(int n) const;

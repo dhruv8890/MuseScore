@@ -22,7 +22,7 @@
      <property name="currentIndex">
       <number>0</number>
      </property>
-     <widget class="QWidget" name="tab_1">
+     <widget class="QWidget" name="tabChangeChannel">
       <attribute name="title">
        <string>Change Channel</string>
       </attribute>
@@ -67,6 +67,9 @@
            <property name="checkable">
             <bool>true</bool>
            </property>
+           <property name="voice1" stdset="0">
+            <bool>true</bool>
+           </property>
           </widget>
          </item>
          <item row="1" column="1">
@@ -75,6 +78,9 @@
             <string>2</string>
            </property>
            <property name="checkable">
+            <bool>true</bool>
+           </property>
+           <property name="voice2" stdset="0">
             <bool>true</bool>
            </property>
           </widget>
@@ -87,6 +93,9 @@
            <property name="checkable">
             <bool>true</bool>
            </property>
+           <property name="voice3" stdset="0">
+            <bool>true</bool>
+           </property>
           </widget>
          </item>
          <item row="1" column="3">
@@ -95,6 +104,9 @@
             <string>4</string>
            </property>
            <property name="checkable">
+            <bool>true</bool>
+           </property>
+           <property name="voice4" stdset="0">
             <bool>true</bool>
            </property>
           </widget>
@@ -110,6 +122,9 @@
            <property name="checkable">
             <bool>true</bool>
            </property>
+           <property name="voice1" stdset="0">
+            <bool>true</bool>
+           </property>
           </widget>
          </item>
          <item row="2" column="1">
@@ -118,6 +133,9 @@
             <string>2</string>
            </property>
            <property name="checkable">
+            <bool>true</bool>
+           </property>
+           <property name="voice2" stdset="0">
             <bool>true</bool>
            </property>
           </widget>
@@ -130,6 +148,9 @@
            <property name="checkable">
             <bool>true</bool>
            </property>
+           <property name="voice3" stdset="0">
+            <bool>true</bool>
+           </property>
           </widget>
          </item>
          <item row="2" column="3">
@@ -138,6 +159,9 @@
             <string>4</string>
            </property>
            <property name="checkable">
+            <bool>true</bool>
+           </property>
+           <property name="voice4" stdset="0">
             <bool>true</bool>
            </property>
           </widget>
@@ -153,6 +177,9 @@
            <property name="checkable">
             <bool>true</bool>
            </property>
+           <property name="voice1" stdset="0">
+            <bool>true</bool>
+           </property>
           </widget>
          </item>
          <item row="3" column="1">
@@ -161,6 +188,9 @@
             <string>2</string>
            </property>
            <property name="checkable">
+            <bool>true</bool>
+           </property>
+           <property name="voice2" stdset="0">
             <bool>true</bool>
            </property>
           </widget>
@@ -173,6 +203,9 @@
            <property name="checkable">
             <bool>true</bool>
            </property>
+           <property name="voice3" stdset="0">
+            <bool>true</bool>
+           </property>
           </widget>
          </item>
          <item row="3" column="3">
@@ -181,6 +214,9 @@
             <string>4</string>
            </property>
            <property name="checkable">
+            <bool>true</bool>
+           </property>
+           <property name="voice4" stdset="0">
             <bool>true</bool>
            </property>
           </widget>
@@ -196,6 +232,9 @@
            <property name="checkable">
             <bool>true</bool>
            </property>
+           <property name="voice1" stdset="0">
+            <bool>true</bool>
+           </property>
           </widget>
          </item>
          <item row="4" column="1">
@@ -204,6 +243,9 @@
             <string>2</string>
            </property>
            <property name="checkable">
+            <bool>true</bool>
+           </property>
+           <property name="voice2" stdset="0">
             <bool>true</bool>
            </property>
           </widget>
@@ -216,6 +258,9 @@
            <property name="checkable">
             <bool>true</bool>
            </property>
+           <property name="voice3" stdset="0">
+            <bool>true</bool>
+           </property>
           </widget>
          </item>
          <item row="4" column="3">
@@ -224,6 +269,9 @@
             <string>4</string>
            </property>
            <property name="checkable">
+            <bool>true</bool>
+           </property>
+           <property name="voice4" stdset="0">
             <bool>true</bool>
            </property>
           </widget>
@@ -262,7 +310,7 @@
        </item>
       </layout>
      </widget>
-     <widget class="QWidget" name="tab_2">
+     <widget class="QWidget" name="tabMIDIAction">
       <attribute name="title">
        <string>MIDI Action</string>
       </attribute>
@@ -346,7 +394,7 @@
        </item>
       </layout>
      </widget>
-     <widget class="QWidget" name="tab_3">
+     <widget class="QWidget" name="tabAeolusStops">
       <attribute name="title">
        <string>Aeolus Stops</string>
       </attribute>
@@ -362,10 +410,7 @@
           <bool>true</bool>
          </property>
          <property name="title">
-          <string notr="true">Change Stops:</string>
-         </property>
-         <property name="flat">
-          <bool>true</bool>
+          <string>Change Stops:</string>
          </property>
          <property name="checkable">
           <bool>true</bool>
@@ -1967,101 +2012,6 @@ altera</string>
             <property name="frameShadow">
              <enum>QFrame::Sunken</enum>
             </property>
-            <widget class="QWidget" name="layoutWidget_2">
-             <property name="geometry">
-              <rect>
-               <x>20</x>
-               <y>30</y>
-               <width>804</width>
-               <height>51</height>
-              </rect>
-             </property>
-             <layout class="QHBoxLayout" name="horizontalLayout_5">
-              <item>
-               <widget class="QLabel" name="label_6">
-                <property name="font">
-                 <font>
-                  <family>DejaVu Serif</family>
-                  <pointsize>12</pointsize>
-                  <weight>75</weight>
-                  <bold>true</bold>
-                 </font>
-                </property>
-                <property name="text">
-                 <string>III</string>
-                </property>
-               </widget>
-              </item>
-              <item>
-               <widget class="QPushButton" name="pushButton_20">
-                <property name="sizePolicy">
-                 <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
-                  <horstretch>0</horstretch>
-                  <verstretch>0</verstretch>
-                 </sizepolicy>
-                </property>
-                <property name="font">
-                 <font>
-                  <family>DejaVu Serif</family>
-                 </font>
-                </property>
-                <property name="text">
-                 <string>Principal
-8</string>
-                </property>
-                <property name="checkable">
-                 <bool>true</bool>
-                </property>
-                <property name="flat">
-                 <bool>false</bool>
-                </property>
-               </widget>
-              </item>
-              <item>
-               <widget class="QPushButton" name="pushButton_21">
-                <property name="text">
-                 <string>Gemshorn
-8</string>
-                </property>
-               </widget>
-              </item>
-              <item>
-               <widget class="QPushButton" name="pushButton_22">
-                <property name="text">
-                 <string>PushButton</string>
-                </property>
-               </widget>
-              </item>
-              <item>
-               <widget class="QPushButton" name="pushButton_23">
-                <property name="text">
-                 <string>PushButton</string>
-                </property>
-               </widget>
-              </item>
-              <item>
-               <widget class="QPushButton" name="pushButton_24">
-                <property name="text">
-                 <string>PushButton</string>
-                </property>
-               </widget>
-              </item>
-              <item>
-               <widget class="QPushButton" name="pushButton_25">
-                <property name="text">
-                 <string>PushButton</string>
-                </property>
-               </widget>
-              </item>
-              <item>
-               <widget class="QPushButton" name="pushButton_26">
-                <property name="text">
-                 <string>PushButton</string>
-                </property>
-               </widget>
-              </item>
-             </layout>
-            </widget>
            </widget>
           </item>
           <item>
@@ -4093,7 +4043,7 @@ VI</string>
        </item>
       </layout>
      </widget>
-     <widget class="QWidget" name="tab_4">
+     <widget class="QWidget" name="tabSwingSettings">
       <attribute name="title">
        <string>Swing Settings</string>
       </attribute>
@@ -4127,7 +4077,7 @@ VI</string>
             </widget>
            </item>
            <item>
-            <widget class="QRadioButton" name="SwingOff">
+            <widget class="QRadioButton" name="swingOff">
              <property name="enabled">
               <bool>true</bool>
              </property>
@@ -4196,6 +4146,114 @@ VI</string>
               <number>60</number>
              </property>
             </widget>
+           </item>
+          </layout>
+         </widget>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="tabCapoSettings">
+      <attribute name="title">
+       <string>Capo Settings</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="capoVerticalLayout">
+       <item>
+        <widget class="QGroupBox" name="setCapoBox">
+         <property name="title">
+          <string>Capo Settings</string>
+         </property>
+         <property name="checkable">
+          <bool>true</bool>
+         </property>
+         <property name="checked">
+          <bool>false</bool>
+         </property>
+         <widget class="QWidget" name="capoHorizontalLayoutWidget">
+          <property name="geometry">
+           <rect>
+            <x>10</x>
+            <y>20</y>
+            <width>601</width>
+            <height>31</height>
+           </rect>
+          </property>
+          <layout class="QHBoxLayout" name="capoHorizontalLayout">
+           <item>
+            <widget class="QLabel" name="capoLabel">
+             <property name="text">
+              <string>Capo fret:</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+             <widget class="QComboBox" name="fretList">
+              <item>
+               <property name="text">
+                <string>No capo</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>1</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>2</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>3</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>4</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>5</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>6</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>7</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>8</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>9</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>10</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>11</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>12</string>
+               </property>
+              </item>
+             </widget>
            </item>
           </layout>
          </widget>
@@ -4275,13 +4333,6 @@ VI</string>
   <tabstop>stop_1_5</tabstop>
   <tabstop>stop_1_6</tabstop>
   <tabstop>stop_1_7</tabstop>
-  <tabstop>pushButton_20</tabstop>
-  <tabstop>pushButton_21</tabstop>
-  <tabstop>pushButton_22</tabstop>
-  <tabstop>pushButton_23</tabstop>
-  <tabstop>pushButton_24</tabstop>
-  <tabstop>pushButton_25</tabstop>
-  <tabstop>pushButton_26</tabstop>
   <tabstop>stop_1_8</tabstop>
   <tabstop>stop_1_9</tabstop>
   <tabstop>stop_1_10</tabstop>
@@ -4291,7 +4342,7 @@ VI</string>
   <tabstop>stop_1_14</tabstop>
   <tabstop>stop_1_15</tabstop>
   <tabstop>setSwingBox</tabstop>
-  <tabstop>SwingOff</tabstop>
+  <tabstop>swingOff</tabstop>
   <tabstop>swingEighth</tabstop>
   <tabstop>swingSixteenth</tabstop>
   <tabstop>swingBox</tabstop>

@@ -67,8 +67,8 @@ ZitaEffectGui::ZitaEffectGui(ZitaReverb* effect, QWidget* parent)
 
 void ZitaEffectGui::updateValues()
       {
-      for (Rotary& r : rotary) {
-            r.value = effect()->value(r.id);
+      for (Rotary& rot : rotary) {
+            rot.value = effect()->value(rot.id);
             }
       update();
       }
@@ -109,19 +109,15 @@ void ZitaEffectGui::mouseMoveEvent(QMouseEvent* e)
       {
       if (r == -1)
             return;
-      int dx = e->globalX() - mx;
       int dy = e->globalY() - my;
-      if (dy > 0 && dy > dx)
-            dx = dy;
-      else if (dy < 0 && dy < dx)
-            dx = dy;
       qreal v = oval;
-      v = v + dx * .01;
+      v = v - dy * .01;
       if (v < 0)
             v = 0;
       else if (v > 1.0)
             v = 1.0;
       rotary[r].value = v;
+
       valueChanged(rotary[r].id, v);
       update();
       }
@@ -139,15 +135,14 @@ void ZitaEffectGui::paintEvent(QPaintEvent*)
             x += pix.width();
             }
       p.setBrush(QColor(0x3f, 0x3f, 0x3f));
-      for (const Rotary& r : rotary) {
+      for (const Rotary& rot : rotary) {
             p.save();
-            p.translate(r.x + 11.5, r.y + 11.5);
-            p.rotate(r.value * 270.0 - 225);
+            p.translate(rot.x + 11.5, rot.y + 11.5);
+            p.rotate(rot.value * 270.0 - 225);
             p.drawRect(QRectF(-2, -2, 11.5 + 2, 4));
             p.restore();
             }
       }
-
 
 }
 

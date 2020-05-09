@@ -15,6 +15,7 @@
 #include "libmscore/audio.h"
 #include "libmscore/score.h"
 
+#define OV_EXCLUDE_STATIC_CALLBACKS
 #include <vorbis/vorbisfile.h>
 
 namespace Ms {
@@ -52,7 +53,7 @@ static size_t ovRead(void* ptr, size_t size, size_t nmemb, void* datasource)
       if (n) {
             const char* src = vd->data.data() + vd->pos;
             memcpy(ptr, src, n);
-            vd->pos += n;
+            vd->pos += int(n);
             }
       return n;
       }
@@ -96,9 +97,12 @@ static long ovTell(void* datasource)
 WaveView::WaveView(QWidget* parent)
    : QWidget(parent)
       {
-      _xpos   = 0;
-      _xmag   = 0.1;
+      _locator = nullptr;
+      _score   = nullptr;
+      _xpos    = 0;
+      _xmag    = 0.1;
       _timeType = TType::TICKS;      // TType::FRAMES
+      _magStep = 0;
       setMinimumHeight(50);
       }
 

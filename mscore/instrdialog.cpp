@@ -1,7 +1,6 @@
 //=============================================================================
 //  MuseScore
 //  Linux Music Score Editor
-//  $Id: instrdialog.cpp 5580 2012-04-27 15:36:57Z wschweer $
 //
 //  Copyright (C) 2002-2009 Werner Schweer and others
 //
@@ -20,6 +19,7 @@
 
 #include "instrdialog.h"
 #include "musescore.h"
+#include "preferences.h"
 #include "scoreview.h"
 #include "seq.h"
 #include "libmscore/barline.h"
@@ -34,10 +34,9 @@
 #include "libmscore/staff.h"
 #include "libmscore/stafftype.h"
 #include "libmscore/undo.h"
+#include "libmscore/bracketItem.h"
 
 namespace Ms {
-
-extern bool useFactorySettings;
 
 //---------------------------------------------------------
 //   InstrumentsDialog
@@ -46,20 +45,24 @@ extern bool useFactorySettings;
 InstrumentsDialog::InstrumentsDialog(QWidget* parent)
    : QDialog(parent)
       {
+      setObjectName("Instruments");
       setupUi(this);
       setWindowFlags(this->windowFlags() & ~Qt::WindowContextHelpButtonHint);
       QAction* a = getAction("instruments");
       connect(a, SIGNAL(triggered()), SLOT(reject()));
       addAction(a);
+      saveButton->setVisible(false);
+      loadButton->setVisible(false);
+      readSettings();
+      }
 
-      if (!useFactorySettings) {
-            QSettings settings;
-            settings.beginGroup("Instruments");
-            resize(settings.value("size", QSize(800, 500)).toSize());
-            move(settings.value("pos", QPoint(10, 10)).toPoint());
-            settings.endGroup();
-            }
+//---------------------------------------------------------
+//   init
+//---------------------------------------------------------
 
+void InstrumentsDialog::init()
+      {
+      instrumentsWidget->init();
       }
 
 //---------------------------------------------------------
@@ -79,9 +82,11 @@ void InstrumentsDialog::on_saveButton_clicked()
       {
       QString name = QFileDialog::getSaveFileName(
          this,
-         tr("MuseScore: Save Instrument List"),
+         tr("Save Instrument List"),
          ".",
-         tr("MuseScore Instruments (*.xml)")
+         tr("MuseScore Instruments") + " (*.xml)",
+         0,
+         preferences.getBool(PREF_UI_APP_USENATIVEDIALOGS) ? QFileDialog::Options() : QFileDialog::DontUseNativeDialog
          );
       if (name.isEmpty())
             return;
@@ -92,25 +97,24 @@ void InstrumentsDialog::on_saveButton_clicked()
             info.setFile(info.filePath() + ext);
       QFile f(info.filePath());
       if (!f.open(QIODevice::WriteOnly)) {
-            QString s = tr("Open Instruments File\n%1\nfailed: ")
-               + QString(strerror(errno));
-            QMessageBox::critical(mscore, tr("MuseScore: Open Instruments File"), s.arg(f.fileName()));
+            QString s = tr("Open Instruments File\n%1\nfailed: %2").arg(f.fileName(), strerror(errno));
+            QMessageBox::critical(mscore, tr("Open Instruments File"), s);
             return;
             }
 
-      Xml xml(&f);
+      XmlWriter xml(0, &f);
       xml.header();
       xml.stag("museScore version=\"" MSC_VERSION "\"");
-      foreach(InstrumentGroup* g, instrumentGroups) {
+      for (InstrumentGroup* g : instrumentGroups) {
             xml.stag(QString("InstrumentGroup name=\"%1\" extended=\"%2\"").arg(g->name).arg(g->extended));
-            foreach(InstrumentTemplate* t, g->instrumentTemplates)
+            for (InstrumentTemplate* t : g->instrumentTemplates)
                   t->write(xml);
             xml.etag();
             }
       xml.etag();
       if (f.error() != QFile::NoError) {
-            QString s = tr("Write Style failed: ") + f.errorString();
-            QMessageBox::critical(this, tr("MuseScore: Write Style"), s);
+            QString s = tr("Write Instruments File failed: %1").arg(f.errorString());
+            QMessageBox::critical(this, tr("Write Instruments File"), s);
             }
       }
 
@@ -121,18 +125,20 @@ void InstrumentsDialog::on_saveButton_clicked()
 void InstrumentsDialog::on_loadButton_clicked()
       {
       QString fn = QFileDialog::getOpenFileName(
-         this, tr("MuseScore: Load Instrument List"),
+         this, tr("Load Instrument List"),
           mscoreGlobalShare + "/templates",
-         tr("MuseScore Instruments (*.xml)")
+         tr("MuseScore Instruments") + " (*.xml)",
+         0,
+         preferences.getBool(PREF_UI_APP_USENATIVEDIALOGS) ? QFileDialog::Options() : QFileDialog::DontUseNativeDialog
          );
       if (fn.isEmpty())
             return;
       QFile f(fn);
       if (!loadInstrumentTemplates(fn)) {
             QMessageBox::warning(0,
-               QWidget::tr("MuseScore: Load Style Failed"),
+               QWidget::tr("Load Style Failed"),
                QString(strerror(errno)),
-               QString::null, QWidget::tr("Quit"), QString::null, 0, 1);
+               QString(), QWidget::tr("Quit"), QString(), 0, 1);
             return;
             }
       instrumentsWidget->buildTemplateList();
@@ -144,11 +150,16 @@ void InstrumentsDialog::on_loadButton_clicked()
 
 void InstrumentsDialog::writeSettings()
       {
-      QSettings settings;
-      settings.beginGroup("Instruments");
-      settings.setValue("size", size());
-      settings.setValue("pos", pos());
-      settings.endGroup();
+      MuseScore::saveGeometry(this);
+      }
+
+//---------------------------------------------------------
+//   readSettings
+//---------------------------------------------------------
+
+void InstrumentsDialog::readSettings()
+      {
+      MuseScore::restoreGeometry(this);
       }
 
 //---------------------------------------------------------
@@ -170,6 +181,25 @@ QTreeWidget* InstrumentsDialog::partiturList()
       }
 
 //---------------------------------------------------------
+//   buildInstrumentsList
+//---------------------------------------------------------
+
+void InstrumentsDialog::buildInstrumentsList()
+      {
+      instrumentsWidget->buildTemplateList();
+      }
+
+//---------------------------------------------------------
+//   updateInstrumentDialog
+//---------------------------------------------------------
+
+void MuseScore::updateInstrumentDialog()
+      {
+      if (instrList)
+            instrList->buildInstrumentsList();
+      }
+
+//---------------------------------------------------------
 //   editInstrList
 //---------------------------------------------------------
 
@@ -183,30 +213,31 @@ void MuseScore::editInstrList()
             instrList->done(0);
             return;
             }
-      Score* rootScore = cs->rootScore();
-      instrList->genPartList(rootScore);
-      rootScore->startCmd();
-      rootScore->deselectAll();
+      instrList->init();
+      MasterScore* masterScore = cs->masterScore();
+      instrList->genPartList(masterScore);
+      masterScore->startCmd();
+      masterScore->deselectAll();
       int rv = instrList->exec();
 
       if (rv == 0) {
-            rootScore->endCmd();
+            masterScore->endCmd();
             return;
             }
-      ScoreView* cv = currentScoreView();
-      if (cv && cv->noteEntryMode()) {
-		cv->cmd(getAction("escape"));
+      ScoreView* csv = currentScoreView();
+      if (csv && csv->noteEntryMode()) {
+		csv->cmd(getAction("escape"));
             qApp->processEvents();
-            updateInputState(cv->score());
+            updateInputState(csv->score());
             }
-      rootScore->inputState().setTrack(-1);
+      masterScore->inputState().setTrack(-1);
 
       // keep the keylist of the first pitched staff to apply it to new ones
       KeyList tmpKeymap;
-      Staff* firstStaff = nullptr;
-      for (Staff* s : rootScore->staves()) {
+      Staff* firstStaff = 0;
+      for (Staff* s : masterScore->staves()) {
             KeyList* km = s->keyList();
-            if (!s->isDrumStaff()) {
+            if (!s->isDrumStaff(Fraction(0,1))) {     // TODO
                   tmpKeymap.insert(km->begin(), km->end());
                   firstStaff = s;
                   break;
@@ -214,7 +245,7 @@ void MuseScore::editInstrList()
             }
       Key normalizedC = Key::C;
       // normalize the keyevents to concert pitch if necessary
-      if (firstStaff && !rootScore->styleB(StyleIdx::concertPitch) && firstStaff->part()->instrument()->transpose().chromatic ) {
+      if (firstStaff && !masterScore->styleB(Sid::concertPitch) && firstStaff->part()->instrument()->transpose().chromatic ) {
             int interval = firstStaff->part()->instrument()->transpose().chromatic;
             normalizedC = transposeKey(normalizedC, interval);
             for (auto i = tmpKeymap.begin(); i != tmpKeymap.end(); ++i) {
@@ -256,72 +287,72 @@ void MuseScore::editInstrList()
             int rstaff = 0;
             PartListItem* pli = static_cast<PartListItem*>(item);
             if (pli->op == ListItemOp::I_DELETE)
-                  rootScore->cmdRemovePart(pli->part);
+                  masterScore->cmdRemovePart(pli->part);
             else if (pli->op == ListItemOp::ADD) {
                   const InstrumentTemplate* t = ((PartListItem*)item)->it;
-                  part = new Part(rootScore);
+                  part = new Part(masterScore);
                   part->initFromInstrTemplate(t);
-                  rootScore->undo(new InsertPart(part, staffIdx));
+                  masterScore->undo(new InsertPart(part, staffIdx));
 
                   pli->part = part;
                   QList<Staff*> linked;
                   for (int cidx = 0; pli->child(cidx); ++cidx) {
                         StaffListItem* sli = static_cast<StaffListItem*>(pli->child(cidx));
-                        Staff* staff       = new Staff(rootScore);
+                        Staff* staff       = new Staff(masterScore);
                         staff->setPart(part);
                         sli->setStaff(staff);
 
                         staff->init(t, sli->staffType(), cidx);
                         staff->setDefaultClefType(sli->defaultClefType());
+                        if (staffIdx > 0)
+                              staff->setBarLineSpan(masterScore->staff(staffIdx - 1)->barLineSpan());
 
-                        rootScore->undoInsertStaff(staff, cidx);
+                        masterScore->undoInsertStaff(staff, cidx);
                         ++staffIdx;
 
                         Staff* linkedStaff = part->staves()->front();
                         if (sli->linked() && linkedStaff != staff) {
-                              cloneStaff(linkedStaff, staff);
+                              Excerpt::cloneStaff(linkedStaff, staff);
                               linked.append(staff);
                               }
                         }
-                  if (linked.size() == 0)
-                        part->staves()->front()->setBarLineSpan(part->nstaves());
 
                   //insert keysigs
-                  int sidx = rootScore->staffIdx(part);
+                  int sidx = masterScore->staffIdx(part);
                   int eidx = sidx + part->nstaves();
                   if (firstStaff)
-                        rootScore->adjustKeySigs(sidx, eidx, tmpKeymap);
+                        masterScore->adjustKeySigs(sidx, eidx, tmpKeymap);
                   }
             else {
                   part = pli->part;
                   if (part->show() != pli->visible())
-                        part->undoChangeProperty(P_ID::VISIBLE, pli->visible());
+                        part->undoChangeProperty(Pid::VISIBLE, pli->visible());
                   for (int cidx = 0; pli->child(cidx); ++cidx) {
                         StaffListItem* sli = static_cast<StaffListItem*>(pli->child(cidx));
                         if (sli->op() == ListItemOp::I_DELETE) {
-                              rootScore->systems()->clear();
                               Staff* staff = sli->staff();
                               int sidx = staff->idx();
-                              rootScore->cmdRemoveStaff(sidx);
+                              masterScore->cmdRemoveStaff(sidx);
                               }
                         else if (sli->op() == ListItemOp::ADD) {
-                              Staff* staff = new Staff(rootScore);
+                              Staff* staff = new Staff(masterScore);
                               staff->setPart(part);
                               staff->initFromStaffType(sli->staffType());
                               sli->setStaff(staff);
                               staff->setDefaultClefType(sli->defaultClefType());
+                              if (staffIdx > 0)
+                                    staff->setBarLineSpan(masterScore->staff(staffIdx - 1)->barLineSpan());
 
                               KeySigEvent ke;
                               if (part->staves()->empty())
                                     ke.setKey(Key::C);
                               else
-                                    ke = part->staff(0)->keySigEvent(0);
+                                    ke = part->staff(0)->keySigEvent(Fraction(0,1));
 
-                              staff->setKey(0, ke);
+                              staff->setKey(Fraction(0,1), ke);
 
                               Staff* linkedStaff = 0;
                               if (sli->linked()) {
-
                                     if (rstaff > 0)
                                           linkedStaff = part->staves()->front();
                                     else {
@@ -336,19 +367,19 @@ void MuseScore::editInstrList()
                               if (linkedStaff) {
                                     // do not create a link if linkedStaff will be removed,
                                     for (int k = 0; pli->child(k); ++k) {
-                                          StaffListItem* i = static_cast<StaffListItem*>(pli->child(k));
-                                          if (i->op() == ListItemOp::I_DELETE && i->staff() == linkedStaff) {
+                                          StaffListItem* li = static_cast<StaffListItem*>(pli->child(k));
+                                          if (li->op() == ListItemOp::I_DELETE && li->staff() == linkedStaff) {
                                                 linkedStaff = 0;
                                                 break;
                                                 }
                                           }
                                     }
-                              rootScore->undoInsertStaff(staff, rstaff, linkedStaff == 0);
+                              masterScore->undoInsertStaff(staff, rstaff, linkedStaff == 0);
                               if (linkedStaff)
-                                    cloneStaff(linkedStaff, staff);
+                                    Excerpt::cloneStaff(linkedStaff, staff);
                               else {
                                     if (firstStaff)
-                                          rootScore->adjustKeySigs(staffIdx, staffIdx+1, tmpKeymap);
+                                          masterScore->adjustKeySigs(staffIdx, staffIdx+1, tmpKeymap);
                                     }
                               ++staffIdx;
                               ++rstaff;
@@ -359,8 +390,8 @@ void MuseScore::editInstrList()
                               const StaffType* stfType = sli->staffType();
 
                               // use selected staff type
-                              if (stfType->name() != staff->staffType()->name())
-                                    rootScore->undo(new ChangeStaffType(staff, *stfType));
+                              if (stfType->name() != staff->staffType(Fraction(0,1))->name())
+                                    masterScore->undo(new ChangeStaffType(staff, *stfType));
                               }
                         else {
                               ++staffIdx;
@@ -391,7 +422,7 @@ void MuseScore::editInstrList()
       int idx2 = 0;
       bool sort = false;
       for (Staff* staff : dst) {
-            int idx = rootScore->staves().indexOf(staff);
+            int idx = masterScore->staves().indexOf(staff);
             if (idx == -1)
                   qDebug("staff in dialog(%p) not found in score", staff);
             else
@@ -402,95 +433,113 @@ void MuseScore::editInstrList()
             }
 
       if (sort)
-            rootScore->undo(new SortStaves(rootScore, dl));
+            masterScore->undo(new SortStaves(masterScore, dl));
 
       //
       // check for valid barLineSpan and bracketSpan
       // in all staves
       //
+      for (Score* s : masterScore->scoreList()) {
+            int n = s->nstaves();
+            int curSpan = 0;
+            for (int j = 0; j < n; ++j) {
+                  Staff* staff = s->staff(j);
+                  int span = staff->barLineSpan();
+                  int setSpan = -1;
 
-      int n = rootScore->nstaves();
-      int curSpan = 0;
-      for (int i = 0; i < n; ++i) {
-            Staff* staff = rootScore->staff(i);
-            int span = staff->barLineSpan();
-            int setSpan = -1;
+                  // determine if we need to update barline span
+                  if (curSpan == 0) {
+                        // no current span; this staff must start a new one
+                        if (span == 0) {
+                              // no span; this staff must have been within a span
+                              // update it to a span of 1
+                              setSpan = j;
+                              }
+                        else if (span > (n - j)) {
+                              // span too big; staves must have been removed
+                              // reduce span to last staff
+                              setSpan = n - j;
+                              }
+                        else if (span > 1 && staff->barLineTo() > 0) {
+                              // TODO: check if span is still valid
+                              // (true if the last staff is the same as it was before this edit)
+                              // the code here fixes https://musescore.org/en/node/41786
+                              // but by forcing an update,
+                              // we lose custom modifications to staff barLineTo
+                              // at least this happens only for span > 1, and not for Mensurstrich (barLineTo<=0)
+                              setSpan = span;   // force update to pick up new barLineTo value
+                              }
+                        else {
+                              // this staff starts a span
+                              curSpan = span;
+                              }
+                        }
+                  else if (span && staff->barLineTo() > 0) {
+                        // within a current span; staff must have span of 0
+                        // except for Mensurstrich (barLineTo<=0)
+                        // for consistency with Barline::endEdit,
+                        // don't special case 1-line staves
+//TODO                        s->undoChangeBarLineSpan(staff, 0, 0, (staff->lines() - 1) * 2);
+                        }
 
-            // determine if we need to update barline span
-            if (curSpan == 0) {
-                  // no current span; this staff must start a new one
-                  if (span == 0) {
-                        // no span; this staff must have been within a span
-                        // update it to a span of 1
-                        setSpan = 1;
-                        }
-                  else if (span > (n - i)) {
-                        // span too big; staves must have been removed
-                        // reduce span to last staff
-                        setSpan = n - i;
-                        }
-                  else if (span > 1 && staff->barLineTo() > 0) {
-                        // TODO: check if span is still valid
-                        // (true if the last staff is the same as it was before this edit)
-                        // the code here fixes https://musescore.org/en/node/41786
-                        // but by forcing an update,
-                        // we lose custom modifications to staff barLineTo
-                        // at least this happens only for span > 1, and not for Mensurstrich (barLineTo<=0)
-                        setSpan = span;   // force update to pick up new barLineTo value
-                        }
-                  else {
+                  // update barline span if necessary
+                  if (setSpan > 0) {
                         // this staff starts a span
-                        curSpan = span;
+                        curSpan = setSpan;
+                        // calculate spanFrom and spanTo values
+//                        int spanFrom = staff->lines() == 1 ? BARLINE_SPAN_1LINESTAFF_FROM : 0;
+//                        int linesTo = masterScore->staff(i + setSpan - 1)->lines();
+//                        int spanTo = linesTo == 1 ? BARLINE_SPAN_1LINESTAFF_TO : (linesTo - 1) * 2;
+//TODO                         s->undoChangeBarLineSpan(staff, setSpan, spanFrom, spanTo);
                         }
-                  }
-            else if (span && staff->barLineTo() > 0) {
-                  // within a current span; staff must have span of 0
-                  // except for Mensurstrich (barLineTo<=0)
-                  // for consistency with Barline::endEdit,
-                  // don't special case 1-line staves
-                  rootScore->undoChangeBarLineSpan(staff, 0, 0, (staff->lines() - 1) * 2);
-                  }
 
-            // update barline span if necessary
-            if (setSpan > 0) {
-                  // this staff starts a span
-                  curSpan = setSpan;
-                  // calculate spanFrom and spanTo values
-                  int spanFrom = staff->lines() == 1 ? BARLINE_SPAN_1LINESTAFF_FROM : 0;
-                  int linesTo = rootScore->staff(i + setSpan - 1)->lines();
-                  int spanTo = linesTo == 1 ? BARLINE_SPAN_1LINESTAFF_TO : (linesTo - 1) * 2;
-                  rootScore->undoChangeBarLineSpan(staff, setSpan, spanFrom, spanTo);
-                  }
+                  // count off one from barline span
+                  --curSpan;
 
-            // count off one from barline span
-            --curSpan;
-
-            // update brackets
-            QList<BracketItem> brackets = staff->brackets();
-            int nn = brackets.size();
-            for (int ii = 0; ii < nn; ++ii) {
-                  if ((brackets[ii]._bracket != BracketType::NO_BRACKET) && (brackets[ii]._bracketSpan > (n - i)))
-                        rootScore->undoChangeBracketSpan(staff, ii, n - i);
+                  // update brackets
+                  for (BracketItem* bi : staff->brackets()) {
+                        if ((bi->bracketSpan() > (n - j)))
+                              bi->undoChangeProperty(Pid::BRACKET_SPAN, n - j);
+                        }
                   }
             }
 
       //
       // there should be at least one measure
       //
-      if (rootScore->measures()->size() == 0)
-            rootScore->insertMeasure(Element::Type::MEASURE, 0, false);
+      if (masterScore->measures()->size() == 0)
+            masterScore->insertMeasure(ElementType::MEASURE, 0, false);
 
-      QList<Score*> toDelete;
-      for (Excerpt* excpt : rootScore->excerpts()) {
-            if (excpt->partScore()->staves().size() == 0)
-                  toDelete.append(excpt->partScore());
+      const QList<Excerpt*> excerpts(masterScore->excerpts()); // excerpts list may change in the loop below
+      for (Excerpt* excerpt : excerpts) {
+            QList<Staff*> sl       = excerpt->partScore()->staves();
+            QMultiMap<int, int> tr = excerpt->tracks();
+            if (sl.size() == 0)
+                  masterScore->undo(new RemoveExcerpt(excerpt));
+            else {
+                  for (Staff* s : sl) {
+                        const LinkedElements* sll = s->links();
+                        if (!sll)
+                              continue;
+                        for (auto le : *sll) {
+                              Staff* ss = toStaff(le);
+                              if (ss->primaryStaff()) {
+                                    for (int j = s->idx() * VOICES; j < (s->idx() + 1) * VOICES; j++) {
+                                          int strack = tr.key(j, -1);
+                                          if (strack != -1 && ((strack & ~3) == ss->idx()))
+                                                break;
+                                          else if (strack != -1)
+                                                tr.insert(ss->idx() + strack % VOICES, tr.value(strack, -1));
+                                          }
+                                    }
+                              }
+                        }
+                  }
             }
-      for(Score* s: toDelete)
-            rootScore->undo(new RemoveExcerpt(s));
 
-      rootScore->setLayoutAll(true);
-      rootScore->endCmd();
-      rootScore->rebuildMidiMapping();
+      masterScore->setLayoutAll();
+      masterScore->endCmd();
+      masterScore->rebuildAndUpdateExpressive(MuseScore::synthesizer("Fluid"));
       seq->initInstruments();
       }
 

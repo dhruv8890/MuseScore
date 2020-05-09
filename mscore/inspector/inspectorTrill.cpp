@@ -1,7 +1,6 @@
 //=============================================================================
 //  MuseScore
 //  Music Composition & Notation
-//  $Id:$
 //
 //  Copyright (C) 2012 Werner Schweer
 //
@@ -12,9 +11,7 @@
 //=============================================================================
 
 #include "inspectorTrill.h"
-#include "musescore.h"
 #include "libmscore/trill.h"
-#include "libmscore/score.h"
 
 namespace Ms {
 
@@ -23,28 +20,35 @@ namespace Ms {
 //---------------------------------------------------------
 
 InspectorTrill::InspectorTrill(QWidget* parent)
-   : InspectorBase(parent)
+   : InspectorElementBase(parent)
       {
-      e.setupUi(addWidget());
-      l.setupUi(addWidget());
-      setupLineStyle(l.lineStyle);
       t.setupUi(addWidget());
 
-      iList = {
-            { P_ID::COLOR,       0, 0, e.color,      e.resetColor      },
-            { P_ID::VISIBLE,     0, 0, e.visible,    e.resetVisible    },
-            { P_ID::USER_OFF,    0, 0, e.offsetX,    e.resetX          },
-            { P_ID::USER_OFF,    1, 0, e.offsetY,    e.resetY          },
-            { P_ID::DIAGONAL,    0, 0, l.diagonal,   l.resetDiagonal   },
-            { P_ID::LINE_COLOR,  0, 0, l.lineColor,  l.resetLineColor  },
-            { P_ID::LINE_WIDTH,  0, 0, l.lineWidth,  l.resetLineWidth  },
-            { P_ID::LINE_STYLE,  0, 0, l.lineStyle,  l.resetLineStyle  },
-            { P_ID::TRILL_TYPE,  0, 0, t.trillType,  t.resetTrillType  },
-            { P_ID::ORNAMENT_STYLE,      0, 0, t.ornamentStyle, t.resetOrnamentStyle },
-            { P_ID::PLAY,   0, 0, t.playArticulation, t.resetPlayArticulation}
+      const std::vector<InspectorItem> iiList = {
+            { Pid::TRILL_TYPE,     0, t.trillType,        t.resetTrillType        },
+            { Pid::PLACEMENT,      0, t.placement,        t.resetPlacement        },
+            { Pid::ORNAMENT_STYLE, 0, t.ornamentStyle,    t.resetOrnamentStyle    },
+            { Pid::PLAY,           0, t.playArticulation, t.resetPlayArticulation }
+            };
+      const std::vector<InspectorPanel> ppList = {
+            { t.title, t.panel }
             };
 
-      mapSignals();
+      mapSignals(iiList, ppList);
+      }
+
+//---------------------------------------------------------
+//   setElement
+//---------------------------------------------------------
+
+void InspectorTrill::setElement()
+      {
+      InspectorElementBase::setElement();
+      if (!t.playArticulation->isChecked()) {
+            t.labelOrnamentStyle->setEnabled(false);
+            t.ornamentStyle->setEnabled(false);
+            t.resetOrnamentStyle->setEnabled(false);
+            }
       }
 }
 

@@ -1,7 +1,6 @@
 //=============================================================================
 //  MusE Score
 //  Linux Music Score Editor
-//  $Id:$
 //
 //  Copyright (C) 2010 Werner Schweer and others
 //
@@ -22,7 +21,7 @@
 #define __SPARM_H__
 
 namespace Ms {
-      class Xml;
+      class XmlWriter;
       class Synth;
       }
 
@@ -55,7 +54,7 @@ class SyntiParameter {
 
       SyntiParameterType type() const;
 
-      void write(Ms::Xml&) const;
+      void write(Ms::XmlWriter&) const;
 
       const QString& name() const;
       void setName(const QString& s);

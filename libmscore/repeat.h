@@ -25,23 +25,22 @@ class Segment;
 //   @@ RepeatMeasure
 //---------------------------------------------------------
 
-class RepeatMeasure : public Rest {
-      Q_OBJECT
-
+class RepeatMeasure final : public Rest {
       QPainterPath path;
 
    public:
       RepeatMeasure(Score*);
       RepeatMeasure &operator=(const RepeatMeasure&) = delete;
-      virtual RepeatMeasure* clone() const override   { return new RepeatMeasure(*this); }
-      virtual Element* linkedClone() override         { return Element::linkedClone(); }
-      virtual Element::Type type() const override     { return Element::Type::REPEAT_MEASURE; }
-      virtual void draw(QPainter*) const override;
-      virtual void layout() override;
-      virtual Fraction duration() const override;
-      Fraction actualDuration() const { return Rest::duration(); }
 
-      virtual QString accessibleInfo();
+      RepeatMeasure* clone() const override   { return new RepeatMeasure(*this); }
+      Element* linkedClone() override         { return Element::linkedClone(); }
+      ElementType type() const override       { return ElementType::REPEAT_MEASURE; }
+      void draw(QPainter*) const override;
+      void layout() override;
+      Fraction ticks() const override;
+      Fraction actualTicks() const { return Rest::ticks(); }
+
+      QString accessibleInfo() const override;
       };
 
 

@@ -47,12 +47,12 @@ StaffState::~StaffState()
 //   write
 //---------------------------------------------------------
 
-void StaffState::write(Xml& xml) const
+void StaffState::write(XmlWriter& xml) const
       {
-      xml.stag(name());
+      xml.stag(this);
       xml.tag("subtype", int(_staffStateType));
       if (staffStateType() == StaffStateType::INSTRUMENT)
-            _instrument->write(xml);
+            _instrument->write(xml, nullptr);
       Element::writeProperties(xml);
       xml.etag();
       }
@@ -68,7 +68,7 @@ void StaffState::read(XmlReader& e)
             if (tag == "subtype")
                   _staffStateType = StaffStateType(e.readInt());
             else if (tag == "Instrument")
-                  _instrument->read(e);
+                  _instrument->read(e, nullptr);
             else if (!Element::readProperties(e))
                   e.unknown();
             }
@@ -80,7 +80,7 @@ void StaffState::read(XmlReader& e)
 
 void StaffState::draw(QPainter* painter) const
       {
-      if (score()->printing())
+      if (score()->printing() || !score()->showUnprintable())
             return;
       QPen pen(selected() ? MScore::selectColor[0] : MScore::layoutBreakColor,
          lw, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
@@ -185,7 +185,7 @@ QString StaffState::staffStateTypeName() const
 //   acceptDrop
 //---------------------------------------------------------
 
-bool StaffState::acceptDrop(const DropData&) const
+bool StaffState::acceptDrop(EditData&) const
       {
       return false;
       }
@@ -194,9 +194,9 @@ bool StaffState::acceptDrop(const DropData&) const
 //   drop
 //---------------------------------------------------------
 
-Element* StaffState::drop(const DropData& data)
+Element* StaffState::drop(EditData& data)
       {
-      Element* e = data.element;
+      Element* e = data.dropElement;
       score()->undoChangeElement(this, e);
       return e;
       }

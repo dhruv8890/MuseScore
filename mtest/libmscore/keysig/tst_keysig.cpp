@@ -1,7 +1,6 @@
 //=============================================================================
 //  MuseScore
 //  Music Composition & Notation
-//  $Id:$
 //
 //  Copyright (C) 2012 Werner Schweer
 //
@@ -17,6 +16,8 @@
 #include "libmscore/measure.h"
 #include "libmscore/keysig.h"
 #include "libmscore/undo.h"
+#include "libmscore/fraction.h"
+#include "libmscore/part.h"
 
 #define DIR QString("libmscore/keysig/")
 
@@ -34,6 +35,8 @@ class TestKeySig : public QObject, public MTest
       void initTestCase();
       void keysig();
       void concertPitch();
+      void keysig_78216();
+      void preferSharpFlat();
       };
 
 //---------------------------------------------------------
@@ -65,7 +68,7 @@ void TestKeySig::keysig()
       QString reference6(DIR  + "keysig.mscx");        // orig
 
       // read file
-      Score* score = readScore(DIR + "keysig.mscx");
+      MasterScore* score = readScore(DIR + "keysig.mscx");
       Measure* m2 = score->firstMeasure()->nextMeasure();
 
       // add a key signature (D major) in measure 2
@@ -86,37 +89,90 @@ void TestKeySig::keysig()
 
       // remove key signature in measure 2
       Segment* s = m2->first();
-      while (!(s->segmentType() & (Segment::Type::KeySig)))
+      while (!(s->isKeySigType()))
             s = s->next();
-      Element* e=s->element(0);
+      Element* e = s->element(0);
       score->startCmd();
       score->undoRemoveElement(e);
       score->endCmd();
       QVERIFY(saveCompareScore(score, writeFile3, reference3));
 
       // undo remove
-      score->undo()->undo();
+      score->undoStack()->undo(&ed);
       QVERIFY(saveCompareScore(score, writeFile4, reference4));
 
       // undo change
-      score->undo()->undo();
+      score->undoStack()->undo(&ed);
       QVERIFY(saveCompareScore(score, writeFile5, reference5));
 
       // undo add
-      score->undo()->undo();
+      score->undoStack()->undo(&ed);
       QVERIFY(saveCompareScore(score, writeFile6, reference6));
 
       delete score;
       }
 
+//---------------------------------------------------------
+//   keysig_78216
+//    input score has section breaks on non-measure MeasureBase objects.
+//    should not display courtesy keysig at the end of final measure of each section (meas 1, 2, & 3), even if section break occurs on subsequent non-measure frame.
+//---------------------------------------------------------
+
+void TestKeySig::keysig_78216()
+      {
+      MasterScore* score = readScore(DIR + "keysig_78216.mscx");
+
+      Measure* m1 = score->firstMeasure();
+      Measure* m2 = m1->nextMeasure();
+      Measure* m3 = m2->nextMeasure();
+
+      // verify no keysig exists in segment of final tick of m1, m2, m3
+      QVERIFY2(m1->findSegment(SegmentType::KeySig, m1->endTick()) == nullptr, "Should be no keysig at end of measure 1.");
+      QVERIFY2(m2->findSegment(SegmentType::KeySig, m2->endTick()) == nullptr, "Should be no keysig at end of measure 2.");
+      QVERIFY2(m3->findSegment(SegmentType::KeySig, m3->endTick()) == nullptr, "Should be no keysig at end of measure 3.");
+
+      delete score;
+      }
+
+//---------------------------------------------------------
+//   concertPitch
+//---------------------------------------------------------
+
 void TestKeySig::concertPitch()
       {
-      Score* score = readScore(DIR + "concert-pitch.mscx");
-      score->doLayout();
+      MasterScore* score = readScore(DIR + "concert-pitch.mscx");
       score->cmdConcertPitchChanged(true, true);
       QVERIFY(saveCompareScore(score, "concert-pitch-01-test.mscx", DIR + "concert-pitch-01-ref.mscx"));
       score->cmdConcertPitchChanged(false, true);
       QVERIFY(saveCompareScore(score, "concert-pitch-02-test.mscx", DIR + "concert-pitch-02-ref.mscx"));
+
+      delete score;
+      }
+
+//---------------------------------------------------------
+//   preferSharpFlat
+//---------------------------------------------------------
+
+void TestKeySig::preferSharpFlat()
+      {
+      MasterScore* score1 = readScore(DIR + "preferSharpFlat-1.mscx");
+      auto parts = score1->parts();
+      Part* part1 = parts[0];
+      part1->setPreferSharpFlat(PreferSharpFlat::FLATS);
+      score1->transpositionChanged(part1, part1->instrument(Fraction(0, 1))->transpose(), Fraction(0, 1), Fraction(16, 4));
+      score1->update();
+      score1->doLayout();
+      QVERIFY(saveCompareScore(score1, "preferSharpFlat-1-test.mscx", DIR + "preferSharpFlat-1-ref.mscx"));
+      delete score1;
+
+      MasterScore* score2 = readScore(DIR + "preferSharpFlat-2.mscx");
+      score2->cmdSelectAll();
+      score2->startCmd();
+      // transpose augmented unison up
+      score2->transpose(TransposeMode::BY_INTERVAL, TransposeDirection::UP, Key::C, 1, true, true, true);
+      score2->endCmd();
+      QVERIFY(saveCompareScore(score2, "preferSharpFlat-2-test.mscx", DIR + "preferSharpFlat-2-ref.mscx"));
+      delete score2;
       }
 
 QTEST_MAIN(TestKeySig)

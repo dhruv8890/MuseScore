@@ -1,7 +1,6 @@
 //=============================================================================
 //  MusE Score
 //  Linux Music Score Editor
-//  $Id:$
 //
 //  Copyright (C) 2010 Werner Schweer and others
 //
@@ -111,12 +110,12 @@ bool SyntiParameterData::operator==(const SyntiParameterData& sp) const
 //   write
 //---------------------------------------------------------
 
-void SyntiParameterData::write(Xml& xml) const
+void SyntiParameterData::write(XmlWriter& xml) const
       {
       if (_type == SP_FLOAT)
             xml.tagE(QString("f name=\"%1\" val=\"%3\"").arg(_name).arg(_fval));
       else if (_type == SP_STRING)
-            xml.tagE(QString("s name=\"%1\" val=\"%3\"").arg(_name).arg(Xml::xmlString(_sval)));
+            xml.tagE(QString("s name=\"%1\" val=\"%3\"").arg(_name).arg(XmlWriter::xmlString(_sval)));
       }
 
 //---------------------------------------------------------
@@ -190,7 +189,7 @@ SyntiParameterType SyntiParameter::type() const
 //   write
 //---------------------------------------------------------
 
-void SyntiParameter::write(Xml& xml) const
+void SyntiParameter::write(XmlWriter& xml) const
       {
       d->write(xml);
       }

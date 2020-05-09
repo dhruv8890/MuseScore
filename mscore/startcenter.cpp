@@ -2,7 +2,7 @@
 //  MuseScore
 //  Music Composition & Notation
 //
-//  Copyright (C) 2014 Werner Schweer
+//  Copyright (C) 2014-2016 Werner Schweer
 //
 //  This program is free software; you can redistribute it and/or modify
 //  it under the terms of the GNU General Public License version 2
@@ -15,6 +15,7 @@
 #include "libmscore/mscore.h"
 #include "startcenter.h"
 #include "scoreBrowser.h"
+#include "tourhandler.h"
 
 namespace Ms {
 
@@ -22,26 +23,32 @@ namespace Ms {
 //   showStartcenter
 //---------------------------------------------------------
 
-void MuseScore::showStartcenter(bool val)
+void MuseScore::showStartcenter(bool show)
       {
       QAction* a = getAction("startcenter");
-      if (val && startcenter == nullptr) {
-            startcenter = new Startcenter;
+      if (show && startcenter == nullptr) {
+            startcenter = new Startcenter(this);
             startcenter->addAction(a);
-            startcenter->readSettings(settings);
+            startcenter->readSettings();
             connect(startcenter, SIGNAL(closed(bool)), a, SLOT(setChecked(bool)));
-            connect(startcenter, SIGNAL(rejected()), a, SLOT(toggle()));
+            connect(startcenter, SIGNAL(closed(bool)), tourHandler(), SLOT(showWelcomeTour()), Qt::QueuedConnection);
             }
-      startcenter->setVisible(val);
+      if (!startcenter)
+            return;
+      if (show)
+            startcenter->setVisible(true);
+      else
+            startcenter->close();
       }
 
 //---------------------------------------------------------
 //   Startcenter
 //---------------------------------------------------------
 
-Startcenter::Startcenter()
- : QDialog(0)
+Startcenter::Startcenter(QWidget* parent)
+ : AbstractDialog(parent)
       {
+      setObjectName("Startcenter");
       setupUi(this);
       setBackgroundRole(QPalette::Base);
       setWindowFlags(this->windowFlags() & ~Qt::WindowContextHelpButtonHint);
@@ -51,18 +58,42 @@ Startcenter::Startcenter()
       connect(closeButton, SIGNAL(clicked()), this, SLOT(close()));
       setStyleSheet(QString("QPushButton { background-color: %1 }").arg(openScore->palette().color(QPalette::Base).name()));
 
-      //init webview
+#ifdef USE_WEBENGINE
       if (!noWebView) {
             _webView = new MyWebView(this);
-            _webView->setUrl(QUrl(QString("https://connect2.musescore.com/?version=%1").arg(VERSION)));
-            horizontalLayout->addWidget(_webView);
-            }
+            _webView->setMaximumWidth(200);
 
-      if (enableExperimental)
-            QWebSettings::globalSettings()->setAttribute(QWebSettings::DeveloperExtrasEnabled, true);
-      QWebSettings::globalSettings()->setAttribute(QWebSettings::PluginsEnabled, false);
+            MyWebEnginePage* page = new MyWebEnginePage(this);
+            MyWebUrlRequestInterceptor* wuri = new MyWebUrlRequestInterceptor(page);
+            QWebEngineProfile* profile = page->profile();
+            profile->setRequestInterceptor(wuri);
+            _webView->setPage(page);
+
+            auto extendedVer = QString(VERSION) + "." + QString(BUILD_NUMBER);
+            QUrl connectPageUrl = QUrl(QString("https://connect2.musescore.com/?version=%1").arg(extendedVer));
+            _webView->setUrl(connectPageUrl);
+
+            horizontalLayout->addWidget(_webView);
+            
+            //workaround for the crashes sometimes happening in Chromium on macOS with Qt 5.12
+            connect(_webView, &QWebEngineView::renderProcessTerminated, this, [this, profile, connectPageUrl](QWebEnginePage::RenderProcessTerminationStatus terminationStatus, int exitCode)
+                    {
+                    qDebug() << "Login page loading terminated" << terminationStatus << " " << exitCode;
+                    profile->clearHttpCache();
+                    _webView->load(connectPageUrl);
+                    _webView->show();
+                    });
+            }
+#endif
+
+//      if (enableExperimental)
+// right now don’t know how it use in WebEngine @handrok
+//            QWebSettings::globalSettings()->setAttribute(QWebSettings::DeveloperExtrasEnabled, true);
+//      QWebSettings::globalSettings()->setAttribute(QWebSettings::PluginsEnabled, false);
       recentPage->setBoldTitle(false);
       updateRecentScores();
+
+      setFocus();
       }
 
 //---------------------------------------------------------
@@ -70,8 +101,8 @@ Startcenter::Startcenter()
 //---------------------------------------------------------
 
 Startcenter::~Startcenter() {
-      if (_webView)
-            delete _webView;
+//      if (_webView)
+//            delete _webView;
       }
 
 //---------------------------------------------------------
@@ -95,6 +126,7 @@ void Startcenter::loadScore(QString s)
 
 void Startcenter::newScore()
       {
+      mscore->tourHandler()->delayWelcomeTour();
       close();
       getAction("file-new")->trigger();
       }
@@ -103,8 +135,9 @@ void Startcenter::newScore()
 //   closeEvent
 //---------------------------------------------------------
 
-void Startcenter::closeEvent(QCloseEvent*)
+void Startcenter::closeEvent(QCloseEvent* event)
       {
+      AbstractDialog::closeEvent(event);
       emit closed(false);
       }
 
@@ -115,10 +148,6 @@ void Startcenter::closeEvent(QCloseEvent*)
 void Startcenter::updateRecentScores()
       {
       QFileInfoList fil = mscore->recentScores();
-      if (fil.size() == 0) {
-            QFileInfo gettingStartedScore(":/data/Getting_Started.mscz");
-            fil.prepend(gettingStartedScore);
-            }
       QFileInfo newScore(":/data/Create_New_Score.mscz");
       fil.prepend(newScore);
       recentPage->setScores(fil);
@@ -131,6 +160,7 @@ void Startcenter::updateRecentScores()
 
 void Startcenter::openScoreClicked()
       {
+      mscore->tourHandler()->delayWelcomeTour();
       close();
       getAction("file-open")->trigger();
       }
@@ -139,71 +169,56 @@ void Startcenter::openScoreClicked()
 //   writeSettings
 //---------------------------------------------------------
 
-void Startcenter::writeSettings(QSettings& settings)
+void Startcenter::writeSettings()
       {
-      settings.beginGroup("Startcenter");
-      settings.setValue("size", size());
-      settings.setValue("pos", pos());
-      settings.endGroup();
+      MuseScore::saveGeometry(this);
       }
 
 //---------------------------------------------------------
 //   readSettings
 //---------------------------------------------------------
 
-void Startcenter::readSettings(QSettings& settings)
+void Startcenter::readSettings()
       {
-      settings.beginGroup("Startcenter");
-      resize(settings.value("size", QSize(690, 520)).toSize());
-      move(settings.value("pos", QPoint(200, 100)).toPoint());
-      settings.endGroup();
+      MuseScore::restoreGeometry(this);
       }
 
 //---------------------------------------------------------
-//   MyNetworkAccessManager
+//   keyPressEvent
 //---------------------------------------------------------
 
-QNetworkReply* MyNetworkAccessManager::createRequest(Operation op,
-                                          const QNetworkRequest & req,
-                                          QIODevice * outgoingData)
+void Startcenter::keyPressEvent(QKeyEvent *event)
       {
-      QNetworkRequest new_req(req);
-      new_req.setRawHeader("Accept-Language",  QString("%1;q=0.8,en-US;q=0.6,en;q=0.4").arg(mscore->getLocaleISOCode()).toAscii());
-      return QNetworkAccessManager::createRequest(op, new_req, outgoingData);
+      if(event->key() == Qt::Key_Escape)
+            event->ignore(); // will handle it on key release.
+      else
+            AbstractDialog::keyPressEvent(event);
       }
 
+//---------------------------------------------------------
+//   keyReleaseEvent
+//---------------------------------------------------------
+
+void Startcenter::keyReleaseEvent(QKeyEvent *event)
+      {
+      if(event->key() == Qt::Key_Escape) {
+            close();
+            }
+      else
+            AbstractDialog::keyReleaseEvent(event);
+      }
+
+#ifdef USE_WEBENGINE
+ 
 //---------------------------------------------------------
 //   MyWebView
 //---------------------------------------------------------
 
 MyWebView::MyWebView(QWidget *parent):
-   QWebView(parent)
+      QWebEngineView(parent)
       {
-      page()->setLinkDelegationPolicy(QWebPage::DelegateAllLinks);
-      QNetworkAccessManager* networkManager = new MyNetworkAccessManager(this);
-#ifndef QT_NO_OPENSSL
-      connect(networkManager,SIGNAL(sslErrors(QNetworkReply*,QList<QSslError>)),this, SLOT(ignoreSSLErrors(QNetworkReply*,QList<QSslError>)));
-#endif
-
-      connect(this, SIGNAL(loadFinished(bool)), SLOT(stopBusy(bool)));
-      connect(this, SIGNAL(linkClicked(const QUrl&)), SLOT(link(const QUrl&)));
-
-      QWebFrame* frame = page()->mainFrame();
-      connect(frame, SIGNAL(javaScriptWindowObjectCleared()), this, SLOT(addToJavascript()));
-
-      page()->setNetworkAccessManager(networkManager);
-
-      setZoomFactor(guiScaling);
-
       if (!enableExperimental)
             setContextMenuPolicy(Qt::NoContextMenu);
-
-      //set cookie jar for persistent cookies
-      CookieJar* jar = new CookieJar(QString(dataPath + "/cookie_store.txt"));
-      page()->networkAccessManager()->setCookieJar(jar);
-
-      page()->currentFrame()->setScrollBarPolicy(Qt::Vertical, Qt::ScrollBarAlwaysOff);
-      page()->currentFrame()->setScrollBarPolicy(Qt::Horizontal, Qt::ScrollBarAsNeeded);
       }
 
 //---------------------------------------------------------
@@ -215,155 +230,40 @@ MyWebView::~MyWebView()
       disconnect(this, SIGNAL(loadFinished(bool)), this, SLOT(stopBusy(bool)));
       }
 
-#ifndef QT_NO_OPENSSL
-/**
-Slot connected to the sslErrors signal of QNetworkAccessManager
-When this slot is called, call ignoreSslErrors method of QNetworkReply
-*/
-void MyWebView::ignoreSSLErrors(QNetworkReply *reply, QList<QSslError> sslErrors)
-      {
-      foreach (const QSslError &error, sslErrors)
-            qDebug("Ignore SSL error: %d %s", error.error(), qPrintable(error.errorString()));
-      reply->ignoreSslErrors(sslErrors);
-      }
-#endif
-
-//---------------------------------------------------------
-//   stopBusy
-//---------------------------------------------------------
-
-void MyWebView::stopBusy(bool val)
-      {
-      if (!val) {
-            setVisible(false);
-            }
-      setCursor(Qt::ArrowCursor);
-      }
-
-//---------------------------------------------------------
-//   setBusy
-//---------------------------------------------------------
-
-void MyWebView::setBusy()
-      {
-      setCursor(Qt::WaitCursor);
-      }
-
-//---------------------------------------------------------
-//   link
-//---------------------------------------------------------
-
-void MyWebView::link(const QUrl& url)
-      {
-      QString path(url.path());
-      QFileInfo fi(path);
-      if (fi.suffix() == "mscz" || fi.suffix() == "xml" || fi.suffix() == "mxl") {
-            mscore->loadFile(url);
-            mscore->showStartcenter(false);
-            }
-      else
-            QDesktopServices::openUrl(url);
-      }
-
-//---------------------------------------------------------
-//   addToJavascript
-//---------------------------------------------------------
-
-void MyWebView::addToJavascript()
-      {
-      QWebFrame* frame = page()->mainFrame();
-      frame->addToJavaScriptWindowObject("mscore", mscore);
-      }
-
 //---------------------------------------------------------
 //   sizeHint
 //---------------------------------------------------------
 
 QSize MyWebView::sizeHint() const
       {
-      return QSize(200 * guiScaling, 600 * guiScaling);
+      return QSize(200 , 600);
       }
 
-//---------------------------------------------------------
-//   CookieJar
-//
-//   Once the QNetworkCookieJar object is deleted, all cookies it held will be
-//   discarded as well. If you want to save the cookies, you should derive from
-//   this class and implement the saving to disk to your own storage format.
-//   (From QNetworkCookieJar documentation.)
-//---------------------------------------------------------
 
-CookieJar::CookieJar(QString path, QObject *parent)
-    : QNetworkCookieJar(parent)
+bool MyWebEnginePage::acceptNavigationRequest(const QUrl & url, QWebEnginePage::NavigationType type, bool isMainFrame)
       {
-      _file = path;
-      load();
-      }
+      qDebug() << "acceptNavigationRequest(" << url << "," << type << "," << isMainFrame << ")";
 
-//---------------------------------------------------------
-//   save
-//---------------------------------------------------------
-
-void CookieJar::load()
+      if (type == QWebEnginePage::NavigationTypeLinkClicked)
       {
-      QFile cookieFile(_file);
-      if (cookieFile.exists() && cookieFile.open(QIODevice::ReadOnly)) {
-            QList<QNetworkCookie> list;
-            QByteArray line;
+            QString path(url.path());
+            QFileInfo fi(path);
+            if (fi.suffix() == "mscz" || fi.suffix() == "xml"
+                  || fi.suffix() == "musicxml" || fi.suffix() == "mxl") {
+                  mscore->loadFile(url);
+                  QAction* a = getAction("startcenter");
+                  a->setChecked(false);
+                  mscore->showStartcenter(false);
+            }
+            else
+                  QDesktopServices::openUrl(url);
 
-            while(!(line = cookieFile.readLine()).isNull()) {
-                  list.append(QNetworkCookie::parseCookies(line));
-                  }
-            setAllCookies(list);
-            }
-      else {
-            if (MScore::debugMode)
-                  qDebug() << "Can't open "<<  _file << " to read cookies";
-            }
+            return false;
+      }
+      return true;
       }
 
-//---------------------------------------------------------
-//   setCookiesFromUrl
-//---------------------------------------------------------
 
-bool CookieJar::setCookiesFromUrl(const QList<QNetworkCookie>& cookieList, const QUrl& url)
-      {
-      bool res = QNetworkCookieJar::setCookiesFromUrl(cookieList, url);
-      save();
-      return res;
-      }
-
-//---------------------------------------------------------
-//   save
-//---------------------------------------------------------
-
-void CookieJar::save()
-      {
-      QList <QNetworkCookie> cookieList = allCookies();
-      QDateTime now = QDateTime::currentDateTime();
-      for (int i = cookieList.count() - 1; i >= 0; --i) {
-            if (cookieList.at(i).isSessionCookie() || cookieList.at(i).expirationDate() < now)
-                  cookieList.removeAt(i);
-            }
-
-      QFile file(_file);
-      if(!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
-            if (MScore::debugMode)
-                  qDebug() << "Can't open "<< _file << " to save cookies";
-            return;
-            }
-
-      QTextStream out(&file);
-      for(int i = 0 ; i < cookieList.size() ; i++) {
-            //get cookie data
-            QNetworkCookie cookie = cookieList.at(i);
-            if (!cookie.isSessionCookie()) {
-                  QByteArray line =  cookie.toRawForm(QNetworkCookie::Full);
-                  out << line << "\n";
-                  }
-            }
-      file.close();
-      }
-
+#endif //USE_WEBENGINE
 }
 

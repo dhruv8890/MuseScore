@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 3.0 Partwise//EN" "http://www.musicxml.org/dtds/partwise.dtd">
-<score-partwise>
+<!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 3.1 Partwise//EN" "http://www.musicxml.org/dtds/partwise.dtd">
+<score-partwise version="3.1">
   <work>
     <work-number>MuseScore testfile</work-number>
     <work-title>Uninitialized divisions at start of file</work-title>
@@ -45,10 +45,11 @@
           <line>2</line>
           </clef>
         </attributes>
-      <note print-object="no">
+      <note>
         <rest/>
         <duration>4</duration>
         <voice>1</voice>
+        <type>whole</type>
         </note>
       </measure>
     <measure number="2">

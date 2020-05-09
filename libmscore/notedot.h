@@ -18,29 +18,27 @@
 namespace Ms {
 
 class Note;
+class Rest;
 
 //---------------------------------------------------------
 //   @@ NoteDot
 //---------------------------------------------------------
 
-class NoteDot : public Element {
-      Q_OBJECT
-
-      int _idx;
+class NoteDot final : public Element {
 
    public:
       NoteDot(Score* = 0);
-      virtual NoteDot* clone() const override     { return new NoteDot(*this); }
-      virtual Element::Type type() const override { return Element::Type::NOTEDOT; }
-      int idx() const                    { return _idx; }
-      void setIdx(int val)               { _idx = val; }
-      virtual qreal mag() const;
 
-      virtual void draw(QPainter*) const override;
-      virtual void read(XmlReader&) override;
-      virtual void layout() override;
+      NoteDot* clone() const override     { return new NoteDot(*this); }
+      ElementType type() const override   { return ElementType::NOTEDOT; }
+      qreal mag() const override;
 
-      Note* note() const { return (Note*)parent(); }
+      void draw(QPainter*) const override;
+      void read(XmlReader&) override;
+      void layout() override;
+
+      Note* note() const { return parent()->isNote() ? toNote(parent()) : 0; }
+      Rest* rest() const { return parent()->isRest() ? toRest(parent()) : 0; }
       };
 
 

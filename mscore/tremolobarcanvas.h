@@ -1,7 +1,6 @@
 //=============================================================================
 //  MusE Score
 //  Linux Music Score Editor
-//  $Id:$
 //
 //  Copyright (C) 2010 Werner Schweer and others
 //
@@ -21,7 +20,7 @@
 #ifndef __TREMOLOBARCANVAS_H__
 #define __TREMOLOBARCANVAS_H__
 
-#include "libmscore/pitchvalue.h"
+#include "gridcanvas.h"
 
 namespace Ms {
 
@@ -29,18 +28,11 @@ namespace Ms {
 //   TremoloBarCanvas
 //---------------------------------------------------------
 
-class TremoloBarCanvas : public QFrame {
+class TremoloBarCanvas : public GridCanvas {
       Q_OBJECT
-      QList<PitchValue> _points;
-
-      virtual void paintEvent(QPaintEvent*);
-      virtual void mousePressEvent(QMouseEvent*);
 
    public:
-      TremoloBarCanvas(QWidget* parent = 0);
-      const QList<PitchValue>& points() const { return _points; }
-      QList<PitchValue>& points()             { return _points; }
-      void setPoints(const QList<PitchValue>& p) { _points = p; }
+      TremoloBarCanvas(QWidget* parent = nullptr);
       };
 }
 

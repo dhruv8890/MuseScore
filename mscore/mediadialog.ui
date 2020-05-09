@@ -14,7 +14,7 @@
    </rect>
   </property>
   <property name="windowTitle">
-   <string>Dialog</string>
+   <string notr="true">Additional Media</string>
   </property>
   <layout class="QHBoxLayout" name="horizontalLayout_6">
    <item>
@@ -39,7 +39,11 @@
           <item>
            <widget class="QToolButton" name="scanFileButton">
             <property name="text">
-             <string notr="true">...</string>
+             <string notr="true"/>
+            </property>
+            <property name="icon">
+             <iconset resource="musescore.qrc">
+              <normaloff>:/data/icons/document-open.svg</normaloff>:/data/icons/document-open.svg</iconset>
             </property>
            </widget>
           </item>
@@ -115,7 +119,11 @@
           <item>
            <widget class="QToolButton" name="audioFileButton">
             <property name="text">
-             <string notr="true">...</string>
+             <string notr="true"/>
+            </property>
+            <property name="icon">
+             <iconset resource="musescore.qrc">
+              <normaloff>:/data/icons/document-open.svg</normaloff>:/data/icons/document-open.svg</iconset>
             </property>
            </widget>
           </item>

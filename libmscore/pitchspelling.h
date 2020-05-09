@@ -19,10 +19,22 @@ namespace Ms {
 
 class MidiNote;
 class Note;
-class Event;
 enum class Key;
 
 const int   INVALID_PITCH      = -1;
+
+#if 0
+enum {
+      STEP_NONE      = -1,
+      STEP_C,
+      STEP_D,
+      STEP_E,
+      STEP_F,
+      STEP_G,
+      STEP_A,
+      STEP_B
+      };
+#endif
 
 // a list of tpc's, with legal ranges, not really an enum, so no way to cnvert into a class
 enum Tpc : signed char {
@@ -57,9 +69,7 @@ enum class NoteCaseType : signed char { AUTO = -1, CAPITAL = 0, LOWER, UPPER };
 
 extern int pitch2tpc(int pitch, Key, Prefer prefer);
 
-extern void spell(QList<Event>& notes, int);
-extern void spell(QList<Note*>& notes);
-extern int computeWindow(const QList<Note*>& notes, int start, int end);
+extern int computeWindow(const std::vector<Note*>& notes, int start, int end);
 extern int tpc(int idx, int pitch, int opt);
 extern QString tpc2name(int tpc, NoteSpellingType spelling, NoteCaseType noteCase, bool explicitAccidental = false);
 extern void tpc2name(int tpc, NoteSpellingType noteSpelling, NoteCaseType noteCase, QString& s, QString& acc, bool explicitAccidental = false);
@@ -74,6 +84,10 @@ extern int tpc2stepByKey(int tpc, Key, int* pAlter);
 extern int tpc2alterByKey(int tpc, Key);
 extern int pitch2absStepByKey(int pitch, int tpc, Key, int* pAlter);
 extern int absStep2pitchByKey(int step, Key);
+extern int tpc2degree(int tpc, Key key);
+extern int tpcInterval(int startTpc, int interval, int alter);
+extern int step2pitchInterval(int step, int alter);
+extern int function2Tpc(const QString& s, Key key);
 
 //---------------------------------------------------------
 //   tpc2alter
@@ -85,7 +99,7 @@ inline static AccidentalVal tpc2alter(int tpc) {
 
 extern QString tpc2stepName(int tpc);
 extern bool tpcIsValid(int val);
-
+inline bool pitchIsValid(int pitch) { return pitch >= 0 && pitch <= 127; }
 
 }     // namespace Ms
 #endif

@@ -1,7 +1,6 @@
 //=============================================================================
 //  MuseScore
 //  Linux Music Score Editor
-//  $Id: stafftext.cpp -1   $
 //
 //  Copyright (C) 2008-2010 Werner Schweer and others
 //
@@ -23,7 +22,9 @@
 #include "libmscore/stafftext.h"
 #include "libmscore/system.h"
 #include "libmscore/staff.h"
+#include "libmscore/segment.h"
 #include "globals.h"
+#include "musescore.h"
 
 namespace Ms {
 
@@ -32,15 +33,15 @@ namespace Ms {
 // initChannelCombo
 //---------------------------------------------------------
 
-static void initChannelCombo(QComboBox* cb, StaffText* st)
+static void initChannelCombo(QComboBox* cb, StaffTextBase* st)
       {
       Part* part = st->staff()->part();
-      int tick = static_cast<Segment*>(st->parent())->tick();
+      Fraction tick = static_cast<Segment*>(st->parent())->tick();
       for (const Channel* a : part->instrument(tick)->channel()) {
-            if (a->name.isEmpty() || a->name == "normal")
-                  cb->addItem(QObject::tr("normal"));
+            if (a->name().isEmpty() || a->name() == Channel::DEFAULT_NAME)
+                  cb->addItem(qApp->translate("channel", Channel::DEFAULT_NAME));
             else
-                  cb->addItem(qApp->translate("InstrumentsXML", a->name.toUtf8().data()));
+                  cb->addItem(qApp->translate("InstrumentsXML", a->name().toUtf8().data()));
             }
       }
 
@@ -48,68 +49,48 @@ static void initChannelCombo(QComboBox* cb, StaffText* st)
 //   StaffTextProperties
 //---------------------------------------------------------
 
-StaffTextProperties::StaffTextProperties(const StaffText* st, QWidget* parent)
+StaffTextProperties::StaffTextProperties(const StaffTextBase* st, QWidget* parent)
    : QDialog(parent)
       {
+      setObjectName("StaffTextProperties");
       setupUi(this);
       if (st->systemFlag()) {
-            setWindowTitle(tr("MuseScore: System Text Properties"));
-            tabWidget->removeTab(2); // Aeolus settings  for staff text only
-            //if (!enableExperimental) tabWidget->removeTab(1); // MIDI action
-            tabWidget->removeTab(0); // Channel switching  for staff text only
+            setWindowTitle(tr("System Text Properties"));
+            tabWidget->removeTab(tabWidget->indexOf(tabAeolusStops)); // Aeolus settings  for staff text only
+            //if (!enableExperimental) tabWidget->removeTab(tabWidget->indexOf(tabMIDIAction));
+            tabWidget->removeTab(tabWidget->indexOf(tabChangeChannel)); // Channel switching  for staff text only
+            tabWidget->removeTab(tabWidget->indexOf(tabCapoSettings)); // Capos for staff text only
             }
       else {
-            setWindowTitle(tr("MuseScore: Staff Text Properties"));
-            //tabWidget->removeTab(3); // Swing settings for system text only, could be disabled here, if desired
+            setWindowTitle(tr("Staff Text Properties"));
+            //tabWidget->removeTab(tabWidget->indexOf(tabSwingSettings)); // Swing settings for system text only, could be disabled here, if desired
 #ifndef AEOLUS
-            tabWidget->removeTab(2);
+            tabWidget->removeTab(tabWidget->indexOf(tabAeolusStops));
 #endif
-            //if (!enableExperimental) tabWidget->removeTab(1); // MIDI action
+            //if (!enableExperimental) tabWidget->removeTab(tabWidget->indexOf(tabMIDIAction));
             }
       setWindowFlags(this->windowFlags() & ~Qt::WindowContextHelpButtonHint);
-      _staffText = static_cast<StaffText*>(st->clone());
+      _staffText = static_cast<StaffTextBase*>(st->clone());
 
-      const char* vbsh { "QToolButton:checked, QToolButton:pressed { color: white; background:%1;}" };
-
-      QString voice1ss = QString(vbsh).arg(MScore::selectColor[0].name());
       vb[0][0] = voice1_1;
-      voice1_1->setStyleSheet(voice1ss);
       vb[0][1] = voice1_2;
-      voice1_2->setStyleSheet(voice1ss);
       vb[0][2] = voice1_3;
-      voice1_3->setStyleSheet(voice1ss);
       vb[0][3] = voice1_4;
-      voice1_4->setStyleSheet(voice1ss);
 
-      QString voice2ss = QString(vbsh).arg(MScore::selectColor[1].name());
       vb[1][0] = voice2_1;
-      voice2_1->setStyleSheet(voice2ss);
       vb[1][1] = voice2_2;
-      voice2_2->setStyleSheet(voice2ss);
       vb[1][2] = voice2_3;
-      voice2_3->setStyleSheet(voice2ss);
       vb[1][3] = voice2_4;
-      voice2_4->setStyleSheet(voice2ss);
 
-      QString voice3ss = QString(vbsh).arg(MScore::selectColor[2].name());
       vb[2][0] = voice3_1;
-      voice3_1->setStyleSheet(voice3ss);
       vb[2][1] = voice3_2;
-      voice3_2->setStyleSheet(voice3ss);
       vb[2][2] = voice3_3;
-      voice3_3->setStyleSheet(voice3ss);
       vb[2][3] = voice3_4;
-      voice3_4->setStyleSheet(voice3ss);
 
-      QString voice4ss = QString(vbsh).arg(MScore::selectColor[3].name());
       vb[3][0] = voice4_1;
-      voice4_1->setStyleSheet(voice4ss);
       vb[3][1] = voice4_2;
-      voice4_2->setStyleSheet(voice4ss);
       vb[3][2] = voice4_3;
-      voice4_3->setStyleSheet(voice4ss);
       vb[3][3] = voice4_4;
-      voice4_4->setStyleSheet(voice4ss);
 
       channelCombo[0] = channelCombo1;
       channelCombo[1] = channelCombo2;
@@ -124,7 +105,7 @@ StaffTextProperties::StaffTextProperties(const StaffText* st, QWidget* parent)
             initChannelCombo(channelCombo[i], _staffText);
 
       Part* part = _staffText->staff()->part();
-      int tick = static_cast<Segment*>(st->parent())->tick();
+      Fraction tick = static_cast<Segment*>(st->parent())->tick();
       int n = part->instrument(tick)->channel().size();
       int rows = 0;
       for (int voice = 0; voice < VOICES; ++voice) {
@@ -132,7 +113,7 @@ StaffTextProperties::StaffTextProperties(const StaffText* st, QWidget* parent)
                   continue;
             for (int i = 0; i < n; ++i) {
                   const Channel* a = part->instrument(tick)->channel(i);
-                  if (a->name != _staffText->channelName(voice))
+                  if (a->name() != _staffText->channelName(voice))
                         continue;
                   int row = 0;
                   for (row = 0; row < rows; ++row) {
@@ -171,15 +152,28 @@ StaffTextProperties::StaffTextProperties(const StaffText* st, QWidget* parent)
                   }
             else if (_staffText->swingParameters()->swingUnit == 0) {
                  swingBox->setEnabled(false);
-                 SwingOff->setChecked(true);
+                 swingOff->setChecked(true);
                  swingBox->setValue(_staffText->swingParameters()->swingRatio);
                  }
             }
 
       connect(mapper, SIGNAL(mapped(int)), SLOT(voiceButtonClicked(int)));
-      connect(SwingOff, SIGNAL(toggled(bool)), SLOT(setSwingControls(bool)));
+      connect(swingOff, SIGNAL(toggled(bool)), SLOT(setSwingControls(bool)));
       connect(swingEighth, SIGNAL(toggled(bool)), SLOT(setSwingControls(bool)));
       connect(swingSixteenth, SIGNAL(toggled(bool)), SLOT(setSwingControls(bool)));
+
+
+      //---------------------------------------------------
+      //    setup capo
+      //      Note that capo is stored as an int, where 0 = no change,
+      //      1 = remove capo, and everyother number (n) = pitch increase
+      //      of n-1 semitones.
+      //---------------------------------------------------
+
+      if (_staffText->capo() != 0) {
+            setCapoBox->setChecked(true);
+            fretList->setCurrentIndex(_staffText->capo()-1);
+            }
 
       //---------------------------------------------------
       //    setup midi actions
@@ -190,11 +184,11 @@ StaffTextProperties::StaffTextProperties(const StaffText* st, QWidget* parent)
             const Channel* a = part->instrument(tick)->channel(i);
             QTreeWidgetItem* item = new QTreeWidgetItem(channelList);
             item->setData(0, Qt::UserRole, i);
-            if (a->name.isEmpty() || a->name == "normal")
-                  item->setText(0, tr("normal"));
+            if (a->name().isEmpty() || a->name() == Channel::DEFAULT_NAME)
+                  item->setText(0, qApp->translate("channel", Channel::DEFAULT_NAME));
             else
-                  item->setText(0, qApp->translate("InstrumentsXML", a->name.toUtf8().data()));
-            item->setText(1, qApp->translate("InstrumentsXML", a->descr.toUtf8().data()));
+                  item->setText(0, qApp->translate("InstrumentsXML", a->name().toUtf8().data()));
+            item->setText(1, qApp->translate("InstrumentsXML", a->descr().toUtf8().data()));
             if (i == 0)
                   selectedItem = item;
             }
@@ -276,6 +270,8 @@ StaffTextProperties::StaffTextProperties(const StaffText* st, QWidget* parent)
 
       curTabIndex = tabWidget->currentIndex();
       connect(tabWidget, SIGNAL(currentChanged(int)), SLOT(tabChanged(int)));
+
+      MuseScore::restoreGeometry(this);
       }
 
 //---------------------------------------------------------
@@ -295,7 +291,7 @@ void StaffTextProperties::setSwingControls(bool checked)
       {
       if (!checked)
             return;
-      if (SwingOff->isChecked())
+      if (swingOff->isChecked())
             swingBox->setEnabled(false);
       else if (swingEighth->isChecked())
             swingBox->setEnabled(true);
@@ -386,42 +382,42 @@ void StaffTextProperties::channelItemChanged(QTreeWidgetItem* item, QTreeWidgetI
       Part* part = _staffText->staff()->part();
 
       int channelIdx      = item->data(0, Qt::UserRole).toInt();
-      int tick = static_cast<Segment*>(_staffText->parent())->tick();
+      Fraction tick = static_cast<Segment*>(_staffText->parent())->tick();
       Channel* channel    = part->instrument(tick)->channel(channelIdx);
-      QString channelName = channel->name;
+      QString channelName = channel->name();
 
       for (const NamedEventList& e : part->instrument(tick)->midiActions()) {
-            QTreeWidgetItem* item = new QTreeWidgetItem(actionList);
-            if (e.name.isEmpty() || e.name == "normal") {
-                  item->setText(0, tr("normal"));
-                  item->setData(0, Qt::UserRole, "normal");
+            QTreeWidgetItem* ti = new QTreeWidgetItem(actionList);
+            if (e.name.isEmpty() || e.name == Channel::DEFAULT_NAME) {
+                  ti->setText(0, qApp->translate("channel", Channel::DEFAULT_NAME));
+                  ti->setData(0, Qt::UserRole, Channel::DEFAULT_NAME);
                   }
             else {
-                  item->setText(0, qApp->translate("InstrumentsXML", e.name.toUtf8().data()));
-                  item->setData(0, Qt::UserRole, e.name);
+                  ti->setText(0, qApp->translate("InstrumentsXML", e.name.toUtf8().data()));
+                  ti->setData(0, Qt::UserRole, e.name);
                   }
-            item->setText(1, qApp->translate("InstrumentsXML", e.descr.toUtf8().data()));
+            ti->setText(1, qApp->translate("InstrumentsXML", e.descr.toUtf8().data()));
             }
       for (const NamedEventList& e : channel->midiActions) {
-            QTreeWidgetItem* item = new QTreeWidgetItem(actionList);
-            if (e.name.isEmpty() || e.name == "normal") {
-                  item->setText(0, tr("normal"));
-                  item->setData(0, Qt::UserRole, "normal");
+            QTreeWidgetItem* ti = new QTreeWidgetItem(actionList);
+            if (e.name.isEmpty() || e.name == Channel::DEFAULT_NAME) {
+                  ti->setText(0, qApp->translate("channel", Channel::DEFAULT_NAME));
+                  ti->setData(0, Qt::UserRole, Channel::DEFAULT_NAME);
                   }
             else {
-                  item->setText(0, qApp->translate("InstrumentsXML", e.name.toUtf8().data()));
-                  item->setData(0, Qt::UserRole, e.name);
+                  ti->setText(0, qApp->translate("InstrumentsXML", e.name.toUtf8().data()));
+                  ti->setData(0, Qt::UserRole, e.name);
                   }
-            item->setText(1, qApp->translate("InstrumentsXML", e.descr.toUtf8().data()));
+            ti->setText(1, qApp->translate("InstrumentsXML", e.descr.toUtf8().data()));
             }
       for (const ChannelActions& ca : *_staffText->channelActions()) {
             if (ca.channel == channelIdx) {
                   for (QString s : ca.midiActionNames) {
                         QList<QTreeWidgetItem*> items;
                         for (int i = 0; i < actionList->topLevelItemCount(); i++) {
-                              QTreeWidgetItem* item = actionList->topLevelItem(i);
-                              if (item->data(0, Qt::UserRole) == s) {
-                                    item->setSelected(true);
+                              QTreeWidgetItem* ti = actionList->topLevelItem(i);
+                              if (ti->data(0, Qt::UserRole) == s) {
+                                    ti->setSelected(true);
                                     }
                               }
                         }
@@ -444,8 +440,8 @@ void StaffTextProperties::saveValues()
             for (int row = 0; row < VOICES; ++row) {
                   if (vb[voice][row]->isChecked()) {
                         int idx     = channelCombo[row]->currentIndex();
-                        int instrId = static_cast<Segment*>(_staffText->parent())->tick();
-                        _staffText->setChannelName(voice, part->instrument(instrId)->channel()[idx]->name);
+                        Fraction instrId = static_cast<Segment*>(_staffText->parent())->tick();
+                        _staffText->setChannelName(voice, part->instrument(instrId)->channel(idx)->name());
                         break;
                         }
                   }
@@ -469,7 +465,7 @@ void StaffTextProperties::saveValues()
             }
       if (setSwingBox->isChecked()) {
             _staffText->setSwing(true);
-            if (SwingOff->isChecked()) {
+            if (swingOff->isChecked()) {
                   _staffText->setSwingParameters(0, swingBox->value());
                   swingBox->setEnabled(false);
                   }
@@ -482,6 +478,22 @@ void StaffTextProperties::saveValues()
                   swingBox->setEnabled(true);
                   }
             }
+
+      if (setCapoBox->isChecked())
+            _staffText->setCapo(fretList->currentIndex()+1);
+      else
+            _staffText->setCapo(0);
       }
+
+//---------------------------------------------------------
+//   hideEvent
+//---------------------------------------------------------
+
+void StaffTextProperties::hideEvent(QHideEvent* event)
+      {
+      MuseScore::saveGeometry(this);
+      QWidget::hideEvent(event);
+      }
+
 }
 

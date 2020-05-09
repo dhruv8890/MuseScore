@@ -15,6 +15,7 @@
 
 #include "text.h"
 #include "instrument.h"
+#include "clef.h"
 
 namespace Ms {
 
@@ -22,10 +23,10 @@ namespace Ms {
 //   @@ InstrumentChange
 //---------------------------------------------------------
 
-class InstrumentChange : public Text  {
-      Q_OBJECT
-
+class InstrumentChange final : public TextBase {
+      Q_DECLARE_TR_FUNCTIONS(InstrumentChange)
       Instrument* _instrument;  // Staff holds ownership if part of score
+      bool _init = false; // Set if the instrument has been set by the user, as there is no other way to tell.
 
    public:
       InstrumentChange(Score*);
@@ -33,23 +34,31 @@ class InstrumentChange : public Text  {
       InstrumentChange(const InstrumentChange&);
       ~InstrumentChange();
 
-      virtual InstrumentChange* clone() const override { return new InstrumentChange(*this); }
-      virtual Element::Type type() const override      { return Element::Type::INSTRUMENT_CHANGE; }
-      virtual void write(Xml& xml) const override;
-      virtual void read(XmlReader&) override;
+      InstrumentChange* clone() const override { return new InstrumentChange(*this); }
+      ElementType type() const override        { return ElementType::INSTRUMENT_CHANGE; }
+
+      void write(XmlWriter& xml) const override;
+      void read(XmlReader&) override;
+
+      void layout() override;
 
       Instrument* instrument() const        { return _instrument;  }
       void setInstrument(Instrument* i)     { _instrument = i;     }
       void setInstrument(Instrument&& i)    { *_instrument = i;    }
       void setInstrument(const Instrument& i);
+      void setupInstrument(const Instrument* instrument);
 
-      Segment* segment() const                { return (Segment*)parent(); }
+      std::vector<KeySig*> keySigs() const;
+      std::vector<Clef*> clefs() const;
 
-      virtual QRectF drag(EditData*) override;
+      bool init() const                     { return _init; }
+      void setInit(bool init)               { _init = init; }
 
-      virtual QVariant getProperty(P_ID propertyId) const override;
-      virtual bool setProperty(P_ID propertyId, const QVariant&) override;
-      virtual QVariant propertyDefault(P_ID) const override;
+      Segment* segment() const              { return toSegment(parent()); }
+
+      QVariant propertyDefault(Pid) const override;
+
+      bool placeMultiple() const override    { return false; }
       };
 
 

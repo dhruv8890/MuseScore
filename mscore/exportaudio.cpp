@@ -1,7 +1,6 @@
 //=============================================================================
 //  MusE Score
 //  Linux Music Score Editor
-//  $Id: exportaudio.cpp 5660 2012-05-22 14:17:39Z wschweer $
 //
 //  Copyright (C) 2009 Werner Schweer and others
 //
@@ -19,101 +18,105 @@
 //=============================================================================
 
 #include "config.h"
+#ifdef HAS_AUDIOFILE
 #include <sndfile.h>
+#endif
 #include "libmscore/score.h"
 #include "libmscore/note.h"
 #include "libmscore/part.h"
 #include "libmscore/mscore.h"
-#include "synthesizer/msynthesizer.h"
+#include "audio/midi/msynthesizer.h"
 #include "musescore.h"
 #include "preferences.h"
 
 namespace Ms {
 
-#ifdef HAS_AUDIOFILE
-
-//---------------------------------------------------------
-//   saveAudio
-//---------------------------------------------------------
-
-bool MuseScore::saveAudio(Score* score, const QString& name)
+///
+/// \brief Function to synthesize audio and output it into a generic QIODevice
+/// \param score The score to output
+/// \param device The output device
+/// \param updateProgress An optional callback function that will be notified with the progress in range [0, 1]
+/// \return True on success, false otherwise.
+///
+/// If the callback function is non zero an returns false the export will be canceled.
+///
+bool MuseScore::saveAudio(Score* score, QIODevice *device, std::function<bool(float)> updateProgress)
       {
-      int format;
-      if (name.endsWith(".wav"))
-            format = SF_FORMAT_WAV | SF_FORMAT_PCM_16;
-      else if (name.endsWith(".ogg"))
-            format = SF_FORMAT_OGG | SF_FORMAT_VORBIS;
-      else if (name.endsWith("flac"))
-            format = SF_FORMAT_FLAC | SF_FORMAT_PCM_16;
-      else {
-            qDebug("unknown audio file type <%s>", qPrintable(name));
+      if (!device) {
+            qDebug() << "Invalid device";
+            return false;
+            }
+
+      if (!device->open(QIODevice::WriteOnly)) {
+            qDebug() << "Could not write to device";
             return false;
             }
 
       EventMap events;
-      score->renderMidi(&events);
-      if(events.size() == 0)
-            return false;
+      // In non-GUI mode current synthesizer settings won't
+      // allow single note dynamics. See issue #289947.
+      const bool useCurrentSynthesizerState = !MScore::noGui;
 
-      MasterSynthesizer* synti = synthesizerFactory();
-      synti->init();
-      int sampleRate = preferences.exportAudioSampleRate;
-      synti->setSampleRate(sampleRate);
-      bool r = synti->setState(score->synthesizerState());
-      if (!r)
-          synti->init();
+      if (useCurrentSynthesizerState) {
+            score->renderMidi(&events, synthesizerState());
+            if (events.empty()) {
+                  device->close();
+                  return false;
+                  }
+            }
+
+      MasterSynthesizer* synth = synthesizerFactory();
+      synth->init();
+      int sampleRate = preferences.getInt(PREF_EXPORT_AUDIO_SAMPLERATE);
+      synth->setSampleRate(sampleRate);
+
+      const SynthesizerState state = useCurrentSynthesizerState ? mscore->synthesizerState() : score->synthesizerState();
+      const bool setStateOk = synth->setState(state);
+
+      if (!setStateOk || !synth->hasSoundFontsLoaded())
+            synth->init(); // re-initialize master synthesizer with default settings
+
+      if (!useCurrentSynthesizerState) {
+            score->masterScore()->rebuildAndUpdateExpressive(synth->synthesizer("Fluid"));
+            score->renderMidi(&events, score->synthesizerState());
+            if (synti)
+                  score->masterScore()->rebuildAndUpdateExpressive(synti->synthesizer("Fluid"));
+
+            if (events.empty())
+                  return false;
+            }
 
       int oldSampleRate  = MScore::sampleRate;
       MScore::sampleRate = sampleRate;
-
-      SF_INFO info;
-      memset(&info, 0, sizeof(info));
-      info.channels   = 2;
-      info.samplerate = sampleRate;
-      info.format     = format;
-      SNDFILE* sf     = sf_open(qPrintable(name), SFM_WRITE, &info);
-      if (sf == 0) {
-            qDebug("open soundfile failed: %s", sf_strerror(sf));
-            delete synti;
-            MScore::sampleRate = oldSampleRate;
-            return false;
-            }
-
-      QProgressDialog progress(this);
-      progress.setWindowFlags(Qt::WindowFlags(Qt::Dialog | Qt::FramelessWindowHint | Qt::WindowTitleHint));
-      progress.setWindowModality(Qt::ApplicationModal);
-      //progress.setCancelButton(0);
-      progress.setCancelButtonText(tr("Cancel"));
-      progress.setLabelText(tr("Exporting..."));
-      if (!MScore::noGui)
-            progress.show();
 
       float peak  = 0.0;
       double gain = 1.0;
       EventMap::const_iterator endPos = events.cend();
       --endPos;
       const int et = (score->utick2utime(endPos->first) + 1) * MScore::sampleRate;
-      progress.setRange(0, et);
+      const int maxEndTime = (score->utick2utime(endPos->first) + 3) * MScore::sampleRate;
 
-      for (int pass = 0; pass < 2; ++pass) {
+      bool cancelled = false;
+      int passes = preferences.getBool(PREF_EXPORT_AUDIO_NORMALIZE) ? 2 : 1;
+      for (int pass = 0; pass < passes; ++pass) {
             EventMap::const_iterator playPos;
             playPos = events.cbegin();
-            synti->allSoundsOff(-1);
+            synth->allSoundsOff(-1);
 
             //
             // init instruments
             //
-            foreach(Part* part, score->parts()) {
+            for (Part* part : score->parts()) {
                   const InstrumentList* il = part->instruments();
-                  for(auto i = il->begin(); i!= il->end(); i++) {
-                        foreach(const Channel* a, i->second->channel()) {
-                              a->updateInitList();
-                              foreach(MidiCoreEvent e, a->init) {
+                  for (auto i = il->begin(); i!= il->end(); i++) {
+                        for (const Channel* instrChan : i->second->channel()) {
+                              const Channel* a = score->masterScore()->playbackChannel(instrChan);
+                              for (MidiCoreEvent e : a->initList()) {
                                     if (e.type() == ME_INVALID)
                                           continue;
-                                    e.setChannel(a->channel);
-                                    int syntiIdx= synti->index(score->midiMapping(a->channel)->articulation->synti);
-                                    synti->play(e, syntiIdx);
+                                    e.setChannel(a->channel());
+                                    int syntiIdx = synth->index(score->masterScore()->midiMapping(a->channel())->articulation()->synti());
+                                    synth->play(e, syntiIdx);
                                     }
                               }
                         }
@@ -138,7 +141,7 @@ bool MuseScore::saveAudio(Score* score, const QString& name)
                               break;
                         int n = f - playTime;
                         if (n) {
-                              synti->process(n, p);
+                              synth->process(n, p);
                               p += 2 * n;
                               }
 
@@ -147,14 +150,14 @@ bool MuseScore::saveAudio(Score* score, const QString& name)
                         const NPlayEvent& e = playPos->second;
                         if (e.isChannelEvent()) {
                               int channelIdx = e.channel();
-                              Channel* c = score->midiMapping(channelIdx)->articulation;
-                              if (!c->mute) {
-                                    synti->play(e, synti->index(c->synti));
+                              const Channel* c = score->masterScore()->midiMapping(channelIdx)->articulation();
+                              if (!c->mute()) {
+                                    synth->play(e, synth->index(c->synti()));
                                     }
                               }
                         }
                   if (frames) {
-                        synti->process(frames, p);
+                        synth->process(frames, p);
                         playTime += frames;
                         }
                   if (pass == 1) {
@@ -162,7 +165,6 @@ bool MuseScore::saveAudio(Score* score, const QString& name)
                               max = qMax(max, qAbs(buffer[i]));
                               buffer[i] *= gain;
                               }
-                        sf_writef_float(sf, buffer, FRAMES);
                         }
                   else {
                         for (unsigned i = 0; i < FRAMES * 2; ++i) {
@@ -170,20 +172,26 @@ bool MuseScore::saveAudio(Score* score, const QString& name)
                               peak = qMax(peak, qAbs(buffer[i]));
                               }
                         }
+                  if (pass == (passes - 1))
+                        device->write(reinterpret_cast<const char*>(buffer), 2 * FRAMES * sizeof(float));
                   playTime = endTime;
-                  if (!MScore::noGui) {
-                        if (progress.wasCanceled())
+                  if (updateProgress) {
+                        // normalize to [0, 1] range
+                        if (!updateProgress(float(pass * et + playTime) / passes / et)) {
+                              cancelled = true;
                               break;
-                        progress.setValue((pass * et + playTime) / 2);
-                        qApp->processEvents();
+                              }
                         }
                   if (playTime >= et)
-                        synti->allNotesOff(-1);
+                        synth->allNotesOff(-1);
                   // create sound until the sound decays
                   if (playTime >= et && max*peak < 0.000001)
                         break;
+                  // hard limit
+                  if (playTime > maxEndTime)
+                        break;
                   }
-            if (progress.wasCanceled())
+            if (cancelled)
                   break;
             if (pass == 0 && peak == 0.0) {
                   qDebug("song is empty");
@@ -192,19 +200,158 @@ bool MuseScore::saveAudio(Score* score, const QString& name)
             gain = 0.99 / peak;
             }
 
+      MScore::sampleRate = oldSampleRate;
+      delete synth;
+
+      device->close();
+
+      return !cancelled;
+      }
+
+#ifdef HAS_AUDIOFILE
+
+
+//---------------------------------------------------------
+//   saveAudio
+//---------------------------------------------------------
+
+bool MuseScore::saveAudio(Score* score, const QString& name)
+      {
+      // QIODevice - SoundFile wrapper class
+      class SoundFileDevice : public QIODevice {
+      private:
+            SF_INFO info;
+            SNDFILE *sf = nullptr;
+            const QString filename;
+      public:
+            SoundFileDevice(int sampleRate, int format, const QString& name)
+                  : filename(name) {
+                  memset(&info, 0, sizeof(info));
+                  info.channels   = 2;
+                  info.samplerate = sampleRate;
+                  info.format     = format;
+                  }
+            ~SoundFileDevice() {
+                  if (sf) {
+                        sf_close(sf);
+                        sf = nullptr;
+                        }
+                  }
+
+            virtual qint64 readData(char *dta, qint64 maxlen) override final {
+                  Q_UNUSED(dta);
+                  qDebug() << "Error: No write supported!";
+                  return maxlen;
+                  }
+
+            virtual qint64 writeData(const char *dta, qint64 len) override final {
+                  size_t trueFrames = len / sizeof(float) / 2;
+                  sf_writef_float(sf, reinterpret_cast<const float*>(dta), trueFrames);
+                  return trueFrames * 2 * sizeof(float);
+                  }
+
+            bool open(QIODevice::OpenMode mode) {
+                  if ((mode & QIODevice::WriteOnly) == 0) {
+                        return false;
+                        }
+                  sf     = sf_open(qPrintable(filename), SFM_WRITE, &info);
+                  if (sf == nullptr) {
+                        qDebug("open soundfile failed: %s", sf_strerror(sf));
+                        return false;
+                        }
+                  return QIODevice::open(mode);
+                  }
+            void close() {
+                  if (sf && sf_close(sf)) {
+                        qDebug("close soundfile failed");
+                        }
+                  sf = nullptr;
+                  QIODevice::close();
+                  }
+            };
+      int format;
+      int PCMRate;
+      switch (preferences.getInt(PREF_EXPORT_AUDIO_PCMRATE)) {
+            case 32: PCMRate = SF_FORMAT_PCM_32; break;
+            case 24: PCMRate = SF_FORMAT_PCM_24; break;
+            case 16: PCMRate = SF_FORMAT_PCM_16; break;
+            case 8:  PCMRate = SF_FORMAT_PCM_S8; break;
+            default: PCMRate = SF_FORMAT_PCM_16; break;
+            }
+
+      if (name.endsWith(".wav"))
+            format = SF_FORMAT_WAV | PCMRate;
+      else if (name.endsWith(".ogg"))
+            format = SF_FORMAT_OGG | SF_FORMAT_VORBIS;
+      else if (name.endsWith(".flac"))
+            format = SF_FORMAT_FLAC | PCMRate;
+      else {
+            qDebug("unknown audio file type <%s>", qPrintable(name));
+            return false;
+            }
+
+      EventMap events;
+      score->renderMidi(&events, synthesizerState());
+      if(events.size() == 0)
+            return false;
+
+      MasterSynthesizer* synth = synthesizerFactory();
+      synth->init();
+      int sampleRate = preferences.getInt(PREF_EXPORT_AUDIO_SAMPLERATE);
+      synth->setSampleRate(sampleRate);
+      bool r = synth->setState(score->synthesizerState());
+      if (!r)
+            synth->init();
+
+      int oldSampleRate  = MScore::sampleRate;
+      MScore::sampleRate = sampleRate;
+
+
+      SoundFileDevice device(sampleRate, format, name);
+
+      // dummy callback function that will be used if there is no gui
+      std::function<bool(float)> progressCallback = [](float) {return true;};
+
+      QProgressDialog progress(this);
+      progress.setWindowFlags(Qt::WindowFlags(Qt::Dialog | Qt::FramelessWindowHint | Qt::WindowTitleHint));
+      progress.setWindowModality(Qt::ApplicationModal);
+      //progress.setCancelButton(0);
+      progress.setCancelButtonText(tr("Cancel"));
+      progress.setLabelText(tr("Exporting…"));
+      if (!MScore::noGui) {
+            // callback function that will update the progress bar
+            // it will return false and thus cancel the export if the user
+            // cancels the progress dialog.
+            progressCallback = [&progress](float v) -> bool {
+                  if (progress.wasCanceled())
+                        return false;
+                  progress.setValue(v * 1000);
+                  qApp->processEvents();
+                  return true;
+                  };
+
+            progress.show();
+            }
+
+      // The range is set arbitrarily to 1000 as steps.
+      // The callback will return float numbers between 0 and 1
+      // which will be scaled into integer 0 to 1000 numbers
+      // which allows a smooth transition.
+      progress.setRange(0, 1000);
+
+      // Save the audio to the SoundFile device
+      bool result = saveAudio(score, &device, progressCallback);
+
       bool wasCanceled = progress.wasCanceled();
       progress.close();
 
       MScore::sampleRate = oldSampleRate;
-      delete synti;
-      if (sf_close(sf)) {
-            qDebug("close soundfile failed");
-            return false;
-            }
+      delete synth;
+
       if (wasCanceled)
             QFile::remove(name);
 
-      return true;
+      return result;
       }
 
 #endif // HAS_AUDIOFILE

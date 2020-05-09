@@ -20,35 +20,43 @@
 #include "xml.h"
 #include "measure.h"
 #include "system.h"
+#include "chord.h"
+#include "keysig.h"
 
 namespace Ms {
+
+//---------------------------------------------------------
+//   instrumentChangeStyle
+//---------------------------------------------------------
+
+static const ElementStyle instrumentChangeStyle {
+      { Sid::instrumentChangePlacement,          Pid::PLACEMENT              },
+      { Sid::instrumentChangeMinDistance,        Pid::MIN_DISTANCE           },
+      };
 
 //---------------------------------------------------------
 //   InstrumentChange
 //---------------------------------------------------------
 
 InstrumentChange::InstrumentChange(Score* s)
-   : Text(s)
+   : TextBase(s, Tid::INSTRUMENT_CHANGE, ElementFlag::MOVABLE | ElementFlag::ON_STAFF)
       {
-      setFlags(ElementFlag::MOVABLE | ElementFlag::SELECTABLE | ElementFlag::ON_STAFF);
-      setTextStyleType(TextStyleType::INSTRUMENT_CHANGE);
+      initElementStyle(&instrumentChangeStyle);
       _instrument = new Instrument();
       }
 
 InstrumentChange::InstrumentChange(const Instrument& i, Score* s)
-   : Text(s)
+   : TextBase(s, Tid::INSTRUMENT_CHANGE, ElementFlag::MOVABLE | ElementFlag::ON_STAFF)
       {
-      setFlags(ElementFlag::MOVABLE | ElementFlag::SELECTABLE | ElementFlag::ON_STAFF);
-      setTextStyleType(TextStyleType::INSTRUMENT_CHANGE);
+      initElementStyle(&instrumentChangeStyle);
       _instrument = new Instrument(i);
       }
 
 InstrumentChange::InstrumentChange(const InstrumentChange& is)
-   : Text(is)
+   : TextBase(is)
       {
-      setFlags(ElementFlag::MOVABLE | ElementFlag::SELECTABLE | ElementFlag::ON_STAFF);
-      setTextStyleType(TextStyleType::INSTRUMENT_CHANGE);
       _instrument = new Instrument(*is._instrument);
+      _init = is._init;
       }
 
 InstrumentChange::~InstrumentChange()
@@ -58,19 +66,120 @@ InstrumentChange::~InstrumentChange()
 
 void InstrumentChange::setInstrument(const Instrument& i)
       {
-      delete _instrument;
-      _instrument = new Instrument(i);
+      *_instrument = i;
+      //delete _instrument;
+      //_instrument = new Instrument(i);
+      }
+
+void InstrumentChange::setupInstrument(const Instrument* instrument)
+      {
+      if (_init) {
+            Fraction tickStart = segment()->tick();
+            Part* part = staff()->part();
+            Interval oldV = part->instrument(tickStart)->transpose();
+
+            // change the clef for each staff
+            for (int i = 0; i < part->nstaves(); i++) {
+                  if (part->instrument(tickStart)->clefType(i) != instrument->clefType(i)) {
+                        ClefType clefType = score()->styleB(Sid::concertPitch) ? instrument->clefType(i)._concertClef : instrument->clefType(i)._transposingClef;
+                        // If instrument change is at the start of a measure, use the measure as the element, as this will place the instrument change before the barline.
+                        Element* element = rtick().isZero() ? toElement(findMeasure()) : toElement(this);
+                        score()->undoChangeClef(part->staff(i), element, clefType, true);
+                  }
+            }
+
+            // Change key signature if necessary
+            if (instrument->transpose() != oldV) {
+                  for (int i = 0; i < part->nstaves(); i++) {
+                        if (!part->staff(i)->keySigEvent(tickStart).isAtonal()) {
+                              KeySigEvent ks;
+                              ks.setForInstrumentChange(true);
+                              Key key = part->staff(i)->key(tickStart);
+                              if (!score()->styleB(Sid::concertPitch))
+                                    key = transposeKey(key, oldV);
+                              ks.setKey(key);
+                              score()->undoChangeKeySig(part->staff(i), tickStart, ks);
+                              }
+                        }
+                  }
+
+            // change instrument in all linked scores
+            for (ScoreElement* se : linkList()) {
+                  InstrumentChange* lic = static_cast<InstrumentChange*>(se);
+                  Instrument* newInstrument = new Instrument(*instrument);
+                  lic->score()->undo(new ChangeInstrument(lic, newInstrument));
+                  }
+
+            // transpose for current score only
+            // this automatically propagates to linked scores
+            if (part->instrument(tickStart)->transpose() != oldV) {
+                  auto i = part->instruments()->upper_bound(tickStart.ticks());    // find(), ++i
+                  Fraction tickEnd;
+                  if (i == part->instruments()->end())
+                        tickEnd = Fraction(-1, 1);
+                  else
+                        tickEnd = Fraction::fromTicks(i->first);
+                  score()->transpositionChanged(part, oldV, tickStart, tickEnd);
+                  }
+
+            const QString newInstrChangeText = tr("To %1").arg(instrument->trackName());
+            undoChangeProperty(Pid::TEXT, TextBase::plainToXmlText(newInstrChangeText));
+            }
+      }
+
+//---------------------------------------------------------
+//   keySigs
+//---------------------------------------------------------
+
+std::vector<KeySig*> InstrumentChange::keySigs() const
+      {
+      std::vector<KeySig*> keysigs;
+      Segment* seg = segment()->prev1(SegmentType::KeySig);
+      if (seg) {
+            int startVoice = part()->staff(0)->idx() * VOICES;
+            int endVoice = part()->staff(part()->nstaves() - 1)->idx() * VOICES;
+            Fraction t = tick();
+            for (int i = startVoice; i <= endVoice; i += VOICES) {
+                  KeySig* ks = toKeySig(seg->element(i));
+                  if (ks && ks->forInstrumentChange() && ks->tick() == t)
+                        keysigs.push_back(ks);
+                  }
+            }
+      return keysigs;
+      }
+
+//---------------------------------------------------------
+//   clefs
+//---------------------------------------------------------
+
+std::vector<Clef*> InstrumentChange::clefs() const
+      {
+      std::vector<Clef*> clefs;
+      Segment* seg = segment()->prev1(SegmentType::Clef);
+      if (seg) {
+            int startVoice = part()->staff(0)->idx() * VOICES;
+            int endVoice = part()->staff(part()->nstaves() - 1)->idx() * VOICES;
+            Fraction t = tick();
+            for (int i = startVoice; i <= endVoice; i += VOICES) {
+                  Clef* clef = toClef(seg->element(i));
+                  if (clef && clef->forInstrumentChange() && clef->tick() == t)
+                        clefs.push_back(clef);
+                  }
+            }
+      return clefs;
       }
 
 //---------------------------------------------------------
 //   write
 //---------------------------------------------------------
 
-void InstrumentChange::write(Xml& xml) const
+void InstrumentChange::write(XmlWriter& xml) const
       {
-      xml.stag("InstrumentChange");
-      _instrument->write(xml);
-      Text::writeProperties(xml);
+      xml.stag(this);
+      _instrument->write(xml, part());
+      if (_init)
+            xml.tag("init", _init);
+      TextBase::writeProperties(xml);
       xml.etag();
       }
 
@@ -83,21 +192,25 @@ void InstrumentChange::read(XmlReader& e)
       while (e.readNextStartElement()) {
             const QStringRef& tag(e.name());
             if (tag == "Instrument")
-                  _instrument->read(e);
-            else if (!Text::readProperties(e))
+                  _instrument->read(e, part());
+            else if (tag == "init")
+                  _init = e.readBool();
+            else if (!TextBase::readProperties(e))
                   e.unknown();
             }
-      }
+      if (score()->mscVersion() < 206) {
+            // previous versions did not honor transposition of instrument change
+            // except in ways that it should not have
+            // notes entered before the instrument change was added would not be altered,
+            // so original transposition remained in effect
+            // notes added afterwards would be transposed by both intervals, resulting in tpc corruption
+            // here we set the instrument change to inherit the staff transposition to emulate previous versions
+            // in Note::read(), we attempt to fix the tpc corruption
+            // There is also code in read206 to try to deal with this, but it is out of date and therefore disabled
+            // What this means is, scores created in 2.1 or later should be fine, scores created in 2.0 maybe not so much
 
-//---------------------------------------------------------
-//   getProperty
-//---------------------------------------------------------
-
-QVariant InstrumentChange::getProperty(P_ID propertyId) const
-      {
-      switch (propertyId) {
-            default:
-                  return Text::getProperty(propertyId);
+            Interval v = staff() ? staff()->part()->instrument()->transpose() : 0;
+            _instrument->setTranspose(v);
             }
       }
 
@@ -105,55 +218,24 @@ QVariant InstrumentChange::getProperty(P_ID propertyId) const
 //   propertyDefault
 //---------------------------------------------------------
 
-QVariant InstrumentChange::propertyDefault(P_ID propertyId) const
+QVariant InstrumentChange::propertyDefault(Pid propertyId) const
       {
       switch (propertyId) {
+            case Pid::SUB_STYLE:
+                  return int(Tid::INSTRUMENT_CHANGE);
             default:
-                  return Text::propertyDefault(propertyId);
+                  return TextBase::propertyDefault(propertyId);
             }
       }
 
 //---------------------------------------------------------
-//   setProperty
+//   layout
 //---------------------------------------------------------
 
-bool InstrumentChange::setProperty(P_ID propertyId, const QVariant& v)
+void InstrumentChange::layout()
       {
-      switch (propertyId) {
-            default:
-                  return Text::setProperty(propertyId, v);
-            }
-      return true;
-      }
-
-//---------------------------------------------------------
-//   drag
-//---------------------------------------------------------
-
-QRectF InstrumentChange::drag(EditData* ed)
-      {
-      QRectF f = Element::drag(ed);
-
-      //
-      // move anchor
-      //
-      Qt::KeyboardModifiers km = qApp->keyboardModifiers();
-      if (km != (Qt::ShiftModifier | Qt::ControlModifier)) {
-            int si;
-            Segment* seg = 0;
-            if (_score->pos2measure(ed->pos, &si, 0, &seg, 0) == nullptr)
-                  return f;
-            if (seg && (seg != segment() || staffIdx() != si)) {
-                  QPointF pos1(canvasPos());
-                  score()->undo(new ChangeParent(this, seg, si));
-                  setUserOff(QPointF());
-                  layout();
-                  QPointF pos2(canvasPos());
-                  setUserOff(pos1 - pos2);
-                  ed->startMove = pos2;
-                  }
-            }
-      return f;
+      TextBase::layout();
+      autoplaceSegmentElement();
       }
 
 }

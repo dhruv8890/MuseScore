@@ -1,9 +1,8 @@
 //=============================================================================
 //  MuseScore
 //  Linux Music Score Editor
-//  $Id: playpanel.h 4722 2011-09-01 12:26:07Z wschweer $
 //
-//  Copyright (C) 2002-2011 Werner Schweer and others
+//  Copyright (C) 2002-2016 Werner Schweer and others
 //
 //  This program is free software; you can redistribute it and/or modify
 //  it under the terms of the GNU General Public License version 2.
@@ -23,6 +22,8 @@
 
 #include "ui_playpanel.h"
 #include "enableplayforwidget.h"
+#include "iplaypanel.h"
+
 namespace Ms {
 
 class Score;
@@ -31,7 +32,7 @@ class Score;
 //   PlayPanel
 //---------------------------------------------------------
 
-class PlayPanel : public QWidget, private Ui::PlayPanelBase {
+class PlayPanel : public QDockWidget, private Ui::PlayPanelBase, public IPlayPanel {
       Q_OBJECT
       int cachedTickPosition;
       int cachedTimePosition;
@@ -49,15 +50,22 @@ class PlayPanel : public QWidget, private Ui::PlayPanelBase {
 
    private slots:
       void volumeChanged(double,int);
+      void metronomeGainChanged(double val, int);
       void relTempoChanged(double,int);
       void relTempoChanged();
       void tempoSliderReleased(int);
       void tempoSliderPressed(int);
+      void volLabel();
+      void volSpinBoxEdited();
+
+   protected:
+      virtual void changeEvent(QEvent *event);
+      void retranslate()  { retranslateUi(this); }
 
    signals:
       void relTempoChanged(double);
+      void metronomeGainChanged(float);
       void posChange(int);
-      void gainChange(float);
       void closed(bool);
 
    public slots:
@@ -69,12 +77,12 @@ class PlayPanel : public QWidget, private Ui::PlayPanelBase {
       PlayPanel(QWidget* parent = 0);
       ~PlayPanel();
 
-      void setTempo(double);
-      void setRelTempo(qreal);
+      void setTempo(double) override;
+      void setRelTempo(qreal) override;
 
       void setEndpos(int);
       void setScore(Score* s);
-      bool isTempoSliderPressed() {return tempoSliderIsPressed;}
+      bool isTempoSliderPressed() const override { return tempoSliderIsPressed; }
       };
 
 

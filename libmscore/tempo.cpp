@@ -24,6 +24,7 @@ TEvent::TEvent()
       type     = TempoType::INVALID;
       tempo    = 0.0;
       pause    = 0.0;
+      time     = 0.0;
       }
 
 TEvent::TEvent(const TEvent& e)
@@ -135,6 +136,22 @@ void TempoMap::dump() const
 void TempoMap::clear()
       {
       std::map<int,TEvent>::clear();
+      ++_tempoSN;
+      }
+
+//---------------------------------------------------------
+//   clearRange
+//    Clears the given range, start tick included, end tick
+//    excluded.
+//---------------------------------------------------------
+
+void TempoMap::clearRange(int tick1, int tick2)
+      {
+      iterator first = lower_bound(tick1);
+      iterator last = lower_bound(tick2);
+      if (first == last)
+            return;
+      erase(first, last);
       ++_tempoSN;
       }
 

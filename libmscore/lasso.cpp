@@ -25,7 +25,6 @@ Lasso::Lasso(Score* s)
    : Element(s)
       {
       setVisible(false);
-      view = 0;
       }
 
 //---------------------------------------------------------
@@ -38,125 +37,91 @@ void Lasso::draw(QPainter* painter) const
       // always 2 pixel width
       qreal w = 2.0 / painter->transform().m11();
       painter->setPen(QPen(MScore::selectColor[0], w));
-      painter->drawRect(_rect);
+      painter->drawRect(bbox());
       }
 
 //---------------------------------------------------------
 //   editDrag
 //---------------------------------------------------------
 
-void Lasso::editDrag(const EditData& ed)
+void Lasso::editDrag(EditData& ed)
       {
       Qt::CursorShape cursorShape = ed.view->cursor().shape();
       switch (int(ed.curGrip)) {
             case 0:
                   cursorShape = Qt::SizeFDiagCursor;
-                  _rect.setTopLeft(_rect.topLeft() + ed.delta);
+                  bbox().setTopLeft(bbox().topLeft() + ed.delta);
                   break;
             case 1:
                   cursorShape = Qt::SizeBDiagCursor;
-                  _rect.setTopRight(_rect.topRight() + ed.delta);
+                  bbox().setTopRight(bbox().topRight() + ed.delta);
                   break;
             case 2:
                   cursorShape = Qt::SizeFDiagCursor;
-                  _rect.setBottomRight(_rect.bottomRight() + ed.delta);
+                  bbox().setBottomRight(bbox().bottomRight() + ed.delta);
                   break;
             case 3:
                   cursorShape = Qt::SizeBDiagCursor;
-                  _rect.setBottomLeft(_rect.bottomLeft() + ed.delta);
+                  bbox().setBottomLeft(bbox().bottomLeft() + ed.delta);
                   break;
             case 4:
                   cursorShape = Qt::SizeVerCursor;
-                  _rect.setTop(_rect.top() + ed.delta.y());
+                  bbox().setTop(bbox().top() + ed.delta.y());
                   break;
             case 5:
                   cursorShape = Qt::SizeHorCursor;
-                  _rect.setRight(_rect.right() + ed.delta.x());
+                  bbox().setRight(bbox().right() + ed.delta.x());
                   break;
             case 6:
                   cursorShape = Qt::SizeVerCursor;
-                  _rect.setBottom(_rect.bottom() + ed.delta.y());
+                  bbox().setBottom(bbox().bottom() + ed.delta.y());
                   break;
             case 7:
                   cursorShape = Qt::SizeHorCursor;
-                  _rect.setLeft(_rect.left() + ed.delta.x());
+                  bbox().setLeft(bbox().left() + ed.delta.x());
                   break;
             }
       ed.view->setCursor(QCursor(cursorShape));
       }
 
 //---------------------------------------------------------
-//   updateGrips
+//   gripsPositions
 //---------------------------------------------------------
 
-void Lasso::updateGrips(Grip* defaultGrip, QVector<QRectF>& r) const
+std::vector<QPointF> Lasso::gripsPositions(const EditData&) const
       {
-      *defaultGrip = Grip(7);
-      r[0].translate(_rect.topLeft());
-      r[1].translate(_rect.topRight());
-      r[2].translate(_rect.bottomRight());
-      r[3].translate(_rect.bottomLeft());
-      r[4].translate(_rect.x() + _rect.width() * .5, _rect.top());
-      r[5].translate(_rect.right(), _rect.y() + _rect.height() * .5);
-      r[6].translate(_rect.x() + _rect.width()*.5, _rect.bottom());
-      r[7].translate(_rect.left(), _rect.y() + _rect.height() * .5);
-      }
-
-//---------------------------------------------------------
-//  layout
-//---------------------------------------------------------
-
-void Lasso::layout()
-      {
-#if 0
-      QRectF bb(_rect);
-      if (view) {
-            qreal dx = 1.5 / view->matrix().m11();
-            qreal dy = 1.5 / view->matrix().m22();
-            for (int i = 0; i < view->gripCount(); ++i)
-                  bb |= view->getGrip(i).adjusted(-dx, -dy, dx, dy);
-            }
-#endif
-      setbbox(_rect);
-      }
-
-//---------------------------------------------------------
-//   startEdit
-//---------------------------------------------------------
-
-void Lasso::startEdit(MuseScoreView* sv, const QPointF&)
-      {
-      view = sv;
-      }
-
-//---------------------------------------------------------
-//   endEdit
-//---------------------------------------------------------
-
-void Lasso::endEdit()
-      {
-      view = 0;
+      const auto box(bbox());
+      return {
+            box.topLeft(),
+            box.topRight(),
+            box.bottomRight(),
+            box.bottomLeft(),
+            QPointF(box.x() + box.width() * .5, box.top()),
+            QPointF(box.right(), box.y() + box.height() * .5),
+            QPointF(box.x() + box.width()*.5, box.bottom()),
+            QPointF(box.left(), box.y() + box.height() * .5)
+            };
       }
 
 //---------------------------------------------------------
 //   setProperty
 //---------------------------------------------------------
 
-bool Lasso::setProperty(P_ID propertyId, const QVariant& v)
+bool Lasso::setProperty(Pid propertyId, const QVariant& v)
       {
-      switch(propertyId) {
-            case P_ID::LASSO_POS:
-                  _rect.moveTo(v.toPointF());
+      switch (propertyId) {
+            case Pid::LASSO_POS:
+                  bbox().moveTo(v.toPointF());
                   break;
-            case P_ID::LASSO_SIZE:
-                  _rect.setSize(v.toSizeF());
+            case Pid::LASSO_SIZE:
+                  bbox().setSize(v.toSizeF());
                   break;
             default:
                   if (!Element::setProperty(propertyId, v))
                         return false;
                   break;
             }
-      score()->setUpdateAll(true);
+      score()->setUpdateAll();
       return true;
       }
 
@@ -164,13 +129,13 @@ bool Lasso::setProperty(P_ID propertyId, const QVariant& v)
 //   getProperty
 //---------------------------------------------------------
 
-QVariant Lasso::getProperty(P_ID propertyId) const
+QVariant Lasso::getProperty(Pid propertyId) const
       {
-      switch(propertyId) {
-            case P_ID::LASSO_POS:
-                  return _rect.topLeft();
-            case P_ID::LASSO_SIZE:
-                  return _rect.size();
+      switch (propertyId) {
+            case Pid::LASSO_POS:
+                  return bbox().topLeft();
+            case Pid::LASSO_SIZE:
+                  return bbox().size();
             default:
                   break;
             }
